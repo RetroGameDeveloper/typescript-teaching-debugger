@@ -1,0 +1,41 @@
+{
+  "name": "ts-teaching-debugger",
+  "version": "0.1.0",
+  "description": "An embeddable TypeScript teaching debugger with AST-aware stepping.",
+  "type": "module",
+  "main": "dist/ts-teaching-debugger.umd.cjs",
+  "module": "dist/ts-teaching-debugger.js",
+  "types": "dist/ts-teaching-debugger.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/ts-teaching-debugger.d.ts",
+      "import": "./dist/ts-teaching-debugger.js",
+      "require": "./dist/ts-teaching-debugger.umd.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc -p tsconfig.json && vite build && tsc -p tsconfig.build.json",
+    "build:demo": "vite build --mode demo",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.29.8",
+    "@babel/types": "^7.29.8",
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.7",
+    "lucide": "^1.28.0"
+  },
+  "devDependencies": {
+    "happy-dom": "^20.11.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.0",
+    "vitest": "^4.1.10"
+  }
+}
