@@ -13,6 +13,15 @@ An embeddable custom element that teaches synchronous TypeScript execution using
 * Responsive Chrome DevTools-inspired interface
 * Shadow DOM style isolation
 * Keyboard controls matching common browser debuggers
+* Searchable teaching library with 12 classic algorithms
+
+## Included lessons
+
+The demo includes linear and binary search; bubble, insertion, selection, merge,
+and quick sort; breadth-first and depth-first graph traversal; Dijkstra shortest
+paths; recursive factorial; and Fibonacci tabulation. Every lesson includes
+time and space complexity, suggested breakpoints, and code that can be stepped
+through inside the teaching runtime.
 
 ## Install
 
