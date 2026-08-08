@@ -22,11 +22,17 @@ import {
   createEditor,
   readBreakpointLines,
   setActivePoint,
+  setCommentVisibility,
   setEditorBreakpoints,
   setEditorCode,
 } from "./editor";
 import { debuggerStyles } from "./styles";
-import type { TeachingNotes } from "./teaching";
+import {
+  parseTeachingComments,
+  teachingNotesFromComments,
+  type TeachingNote,
+  type TeachingNotes,
+} from "./teaching";
 
 const runtimeTeachingNotes: Record<string, string> = {
   ArrowFunctionExpression:
@@ -77,6 +83,9 @@ const componentTemplate = `
       <button class="tool-button" data-command="out" type="button" aria-label="Step out" title="Step out (Shift+F11)"></button>
       <span class="toolbar-separator" aria-hidden="true"></span>
       <button class="tool-button" data-command="restart" type="button" aria-label="Restart" title="Restart (Ctrl+Shift+F5)"></button>
+      <span class="toolbar-separator" aria-hidden="true"></span>
+      <button class="view-toggle" data-view="comments" type="button" aria-pressed="false">Comments</button>
+      <button class="view-toggle" data-view="questions" type="button" aria-pressed="true">Questions</button>
       <div class="pause-summary" data-status="ready">Ready to evaluate TypeScript</div>
     </div>
     <div class="workspace">
@@ -89,6 +98,16 @@ const componentTemplate = `
           <p class="teaching-title">Ready to run</p>
           <p class="teaching-copy">Execution pauses before each executable AST node. Type-only syntax is parsed but skipped at runtime.</p>
           <span class="ast-token">Program</span>
+          <div class="teaching-question" hidden>
+            <p class="question-label">Question</p>
+            <div class="question-prompt"></div>
+            <textarea class="question-response" rows="2" aria-label="Your answer" placeholder="Write your answer before revealing the solution"></textarea>
+            <button class="solution-toggle" type="button">Reveal solution</button>
+            <div class="teaching-solution" hidden>
+              <p class="solution-label">Solution</p>
+              <div class="solution-copy"></div>
+            </div>
+          </div>
         </div>
         <section class="panel-section" data-section="scope" data-collapsed="false">
           <button class="section-toggle" type="button" aria-expanded="true"><span data-chevron></span>Scope<span class="section-count">0</span></button>
@@ -123,6 +142,60 @@ function icon(node: IconNode): SVGElement {
     height: 16,
     width: 16,
   });
+}
+
+function appendInlineMarkdown(parent: HTMLElement, source: string): void {
+  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(source))) {
+    parent.append(document.createTextNode(source.slice(cursor, match.index)));
+    const token = match[0];
+    const element = document.createElement(
+      token.startsWith("`") ? "code" : token.startsWith("**") ? "strong" : "em",
+    );
+    element.textContent = token.startsWith("**")
+      ? token.slice(2, -2)
+      : token.slice(1, -1);
+    parent.append(element);
+    cursor = match.index + token.length;
+  }
+
+  parent.append(document.createTextNode(source.slice(cursor)));
+}
+
+function renderMarkdown(target: HTMLElement, markdown: string): void {
+  target.replaceChildren();
+  const lines = markdown.split("\n");
+  let list: HTMLUListElement | undefined;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    if (!line) {
+      list = undefined;
+      continue;
+    }
+
+    const listItem = line.match(/^[-*]\s+(.+)$/);
+
+    if (listItem) {
+      if (!list) {
+        list = document.createElement("ul");
+        target.append(list);
+      }
+      const item = document.createElement("li");
+      appendInlineMarkdown(item, listItem[1] ?? "");
+      list.append(item);
+      continue;
+    }
+
+    list = undefined;
+    const paragraph = document.createElement("p");
+    appendInlineMarkdown(paragraph, line.replace(/^#{1,6}\s+/, ""));
+    target.append(paragraph);
+  }
 }
 
 function formatStatus(status: DebuggerSnapshot["status"]): string {
@@ -187,6 +260,10 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   private snapshot: DebuggerSnapshot = { status: "ready" };
   private suppressEditorChange = false;
   private _teachingNotes: TeachingNotes = {};
+  private commentsVisible = false;
+  private questionsVisible = true;
+  private solutionVisible = false;
+  private teachingLine?: number;
 
   get code(): string {
     return this.editor?.state.doc.toString() ?? this._code;
@@ -199,6 +276,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
       this.suppressEditorChange = true;
       setEditorCode(this.editor, this._code);
       this.suppressEditorChange = false;
+      this.refreshTeachingComments();
       this.scheduleReset(0);
     }
   }
@@ -220,15 +298,27 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this.renderBreakpoints();
   }
 
-  get teachingNotes(): TeachingNotes {
-    return this._teachingNotes;
+  get showComments(): boolean {
+    return this.commentsVisible;
   }
 
-  set teachingNotes(notes: TeachingNotes) {
-    this._teachingNotes = notes ?? {};
+  set showComments(visible: boolean) {
+    this.commentsVisible = Boolean(visible);
+    this.applyCommentVisibility();
+    this.renderViewToggles();
+  }
+
+  get showQuestions(): boolean {
+    return this.questionsVisible;
+  }
+
+  set showQuestions(visible: boolean) {
+    this.questionsVisible = Boolean(visible);
+    this.solutionVisible = false;
     if (this.shadowRoot) {
       this.renderTeachingCard();
     }
+    this.renderViewToggles();
   }
 
   connectedCallback(): void {
@@ -251,6 +341,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
       parent: this.requiredElement(".editor-host"),
       readOnly: this.hasAttribute("readonly"),
     });
+    this.refreshTeachingComments();
     setEditorBreakpoints(this.editor, this._breakpoints);
     this.bindEvents();
     void this.reset();
@@ -378,6 +469,29 @@ export class TsTeachingDebuggerElement extends HTMLElement {
       );
     });
 
+    this.shadowRoot?.querySelectorAll<HTMLButtonElement>("[data-view]").forEach((button) => {
+      button.addEventListener(
+        "click",
+        () => {
+          if (button.dataset.view === "comments") {
+            this.showComments = !this.showComments;
+          } else if (button.dataset.view === "questions") {
+            this.showQuestions = !this.showQuestions;
+          }
+        },
+        { signal },
+      );
+    });
+
+    this.requiredElement<HTMLButtonElement>(".solution-toggle").addEventListener(
+      "click",
+      () => {
+        this.solutionVisible = !this.solutionVisible;
+        this.renderTeachingCard();
+      },
+      { signal },
+    );
+
     this.shadowRoot?.querySelectorAll<HTMLButtonElement>(".section-toggle").forEach((button) => {
       button.addEventListener(
         "click",
@@ -447,13 +561,27 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this._code = source;
 
     if (!this.suppressEditorChange) {
-      this._teachingNotes = {};
+      this.refreshTeachingComments();
       this.engine?.requestPause();
       this.scheduleReset(450);
       this.dispatchEvent(
         new CustomEvent("code-change", { detail: { code: source } }),
       );
     }
+  }
+
+  private refreshTeachingComments(): void {
+    this._teachingNotes = teachingNotesFromComments(this._code);
+    this.applyCommentVisibility();
+  }
+
+  private applyCommentVisibility(): void {
+    if (!this.editor) return;
+    const ranges = parseTeachingComments(this._code).map(({ from, to }) => ({
+      from,
+      to,
+    }));
+    setCommentVisibility(this.editor, ranges, this.commentsVisible);
   }
 
   private scheduleReset(delay: number): void {
@@ -526,6 +654,15 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this.renderBreakpoints();
     this.renderConsole();
     this.renderStatusbar();
+    this.renderViewToggles();
+  }
+
+  private renderViewToggles(): void {
+    if (!this.shadowRoot) return;
+    const comments = this.requiredElement<HTMLButtonElement>('[data-view="comments"]');
+    const questions = this.requiredElement<HTMLButtonElement>('[data-view="questions"]');
+    comments.setAttribute("aria-pressed", String(this.commentsVisible));
+    questions.setAttribute("aria-pressed", String(this.questionsVisible));
   }
 
   private renderToolbar(): void {
@@ -572,11 +709,13 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     const title = this.requiredElement<HTMLElement>(".teaching-title");
     const copy = this.requiredElement<HTMLElement>(".teaching-copy");
     const token = this.requiredElement<HTMLElement>(".ast-token");
+    const question = this.requiredElement<HTMLElement>(".teaching-question");
 
     if (this.snapshot.status === "error") {
       title.textContent = "Execution stopped";
       copy.textContent = this.snapshot.error?.message ?? "An unknown error occurred.";
       token.textContent = "RuntimeError";
+      question.hidden = true;
       return;
     }
 
@@ -584,6 +723,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
       title.textContent = "Program complete";
       copy.textContent = "Every reachable runtime node has executed. Restart to follow the state changes again.";
       token.textContent = "Complete";
+      question.hidden = true;
       return;
     }
 
@@ -591,16 +731,49 @@ export class TsTeachingDebuggerElement extends HTMLElement {
       title.textContent = "Ready to run";
       copy.textContent = "Execution pauses before each executable AST node. Type-only syntax is parsed but skipped at runtime.";
       token.textContent = "Program";
+      question.hidden = true;
       return;
     }
 
     const lessonNote = this._teachingNotes[point.range.startLine];
     title.textContent = lessonNote?.title ?? point.label;
-    copy.textContent =
+    renderMarkdown(
+      copy,
       lessonNote?.explanation ??
-      runtimeTeachingNotes[point.nodeType] ??
-      "This is the next executable syntax node in the current control-flow path.";
+        runtimeTeachingNotes[point.nodeType] ??
+        "This is the next executable syntax node in the current control-flow path.",
+    );
     token.textContent = `${point.nodeType} - ${point.range.startLine}:${point.range.startColumn + 1}`;
+    this.renderQuestion(lessonNote, point.range.startLine);
+  }
+
+  private renderQuestion(note: TeachingNote | undefined, line: number): void {
+    const container = this.requiredElement<HTMLElement>(".teaching-question");
+
+    if (!this.questionsVisible || !note?.question) {
+      container.hidden = true;
+      return;
+    }
+
+    if (this.teachingLine !== line) {
+      this.teachingLine = line;
+      this.solutionVisible = false;
+      this.requiredElement<HTMLTextAreaElement>(".question-response").value = "";
+    }
+
+    container.hidden = false;
+    renderMarkdown(this.requiredElement<HTMLElement>(".question-prompt"), note.question);
+    const solution = this.requiredElement<HTMLElement>(".teaching-solution");
+    const toggle = this.requiredElement<HTMLButtonElement>(".solution-toggle");
+    solution.hidden = !this.solutionVisible;
+    toggle.textContent = this.solutionVisible ? "Hide solution" : "Reveal solution";
+
+    if (this.solutionVisible) {
+      renderMarkdown(
+        this.requiredElement<HTMLElement>(".solution-copy"),
+        note.solution ?? note.explanation,
+      );
+    }
   }
 
   private renderScope(): void {
