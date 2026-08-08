@@ -138,35 +138,38 @@
         box-shadow: 0 0 0 2px rgba(138, 180, 248, 0.15);
       }
 
-      .category-filters {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 5px;
-        padding: 0 10px 10px;
-      }
-
-      .category-button {
-        background: transparent;
-        border: 1px solid #4b4f52;
-        border-radius: 999px;
-        color: #bdc1c6;
-        cursor: pointer;
-        font-size: 10px;
-        padding: 5px 8px;
-      }
-
-      .category-button:hover,
-      .category-button[aria-pressed="true"] {
-        background: rgba(138, 180, 248, 0.12);
-        border-color: #8ab4f8;
-        color: #8ab4f8;
-      }
-
       .example-list {
         border-top: 1px solid #303134;
         flex: 1;
         overflow-y: auto;
         padding: 6px;
+      }
+
+      .example-group + .example-group {
+        border-top: 1px solid #303134;
+        margin-top: 5px;
+        padding-top: 5px;
+      }
+
+      .example-group-heading {
+        align-items: baseline;
+        display: flex;
+        gap: 7px;
+        padding: 7px 9px 5px;
+      }
+
+      .example-group-order {
+        color: #8ab4f8;
+        font: 600 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+
+      .example-group-title {
+        color: #bdc1c6;
+        font-size: 10px;
+        font-weight: 650;
+        letter-spacing: 0.055em;
+        margin: 0;
+        text-transform: uppercase;
       }
 
       .example-button {
@@ -331,7 +334,6 @@
               autocomplete="off"
             />
           </div>
-          <div class="category-filters" id="category-filters"></div>
           <div class="example-list" id="example-list"></div>
         </aside>
         <section class="lesson-panel" aria-label="Selected algorithm lesson">
