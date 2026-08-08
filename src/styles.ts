@@ -212,6 +212,187 @@ export const debuggerStyles: string = `
     height: 100%;
   }
 
+  .guided-overlay {
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    position: absolute;
+    z-index: 20;
+  }
+
+  .guided-dialog {
+    background: rgba(37, 38, 41, 0.98);
+    border: 1px solid rgba(197, 138, 249, 0.58);
+    border-radius: 10px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(197, 138, 249, 0.08);
+    color: var(--debug-text);
+    left: 50%;
+    max-height: calc(100% - 24px);
+    max-width: calc(100% - 28px);
+    overflow: auto;
+    pointer-events: auto;
+    position: absolute;
+    top: 18px;
+    transform: translateX(-50%);
+    width: min(560px, calc(100% - 28px));
+  }
+
+  .guided-header {
+    align-items: center;
+    background: linear-gradient(90deg, rgba(197, 138, 249, 0.14), rgba(138, 180, 248, 0.05));
+    border-bottom: 1px solid var(--debug-border);
+    display: grid;
+    gap: 9px;
+    grid-template-columns: 1fr auto auto;
+    min-height: 36px;
+    padding: 0 9px 0 13px;
+  }
+
+  .guided-kicker {
+    color: #d7aefb;
+    font: 600 9px/1 var(--debug-mono);
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+
+  .guided-progress {
+    color: var(--debug-muted);
+    font: 10px/1 var(--debug-mono);
+  }
+
+  .guided-close {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    color: var(--debug-muted);
+    cursor: pointer;
+    display: flex;
+    font: 14px/1 var(--debug-mono);
+    height: 24px;
+    justify-content: center;
+    width: 24px;
+  }
+
+  .guided-close:hover {
+    background: rgba(232, 234, 237, 0.08);
+    color: var(--debug-text);
+  }
+
+  .guided-body {
+    padding: 15px 17px 16px;
+  }
+
+  .guided-title {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin: 0 0 7px;
+  }
+
+  .guided-documentation,
+  .guided-question-prompt,
+  .guided-solution-copy {
+    color: #bdc1c6;
+    font-size: 12px;
+    line-height: 1.58;
+  }
+
+  .guided-documentation p,
+  .guided-question-prompt p,
+  .guided-solution-copy p {
+    margin: 0;
+  }
+
+  .guided-documentation code,
+  .guided-question-prompt code,
+  .guided-solution-copy code {
+    background: rgba(138, 180, 248, 0.12);
+    border-radius: 3px;
+    color: var(--debug-blue);
+    font: 11px/1.4 var(--debug-mono);
+    padding: 1px 4px;
+  }
+
+  .guided-question {
+    border-top: 1px solid rgba(197, 138, 249, 0.22);
+    margin-top: 13px;
+    padding-top: 12px;
+  }
+
+  .guided-response {
+    background: #202124;
+    border: 1px solid var(--debug-border);
+    border-radius: 5px;
+    color: var(--debug-text);
+    display: block;
+    font: 11px/1.5 var(--debug-mono);
+    margin-top: 9px;
+    min-height: 68px;
+    padding: 8px;
+    resize: vertical;
+    width: 100%;
+  }
+
+  .guided-response:focus {
+    border-color: #c58af9;
+    outline: 2px solid rgba(197, 138, 249, 0.13);
+  }
+
+  .guided-solution-toggle {
+    background: rgba(197, 138, 249, 0.1);
+    border: 1px solid rgba(197, 138, 249, 0.32);
+    border-radius: 5px;
+    color: #d7aefb;
+    cursor: pointer;
+    font: 10px/1 var(--debug-mono);
+    margin-top: 8px;
+    padding: 7px 9px;
+  }
+
+  .guided-solution {
+    background: rgba(129, 201, 149, 0.07);
+    border-left: 2px solid var(--debug-green);
+    margin-top: 10px;
+    padding: 9px 10px;
+  }
+
+  .guided-footer {
+    align-items: center;
+    border-top: 1px solid var(--debug-border);
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 10px 12px;
+  }
+
+  .guided-previous,
+  .guided-next {
+    border: 1px solid var(--debug-border);
+    border-radius: 5px;
+    cursor: pointer;
+    font: 10px/1 var(--debug-mono);
+    min-width: 74px;
+    padding: 8px 11px;
+  }
+
+  .guided-previous {
+    background: transparent;
+    color: var(--debug-text);
+  }
+
+  .guided-next {
+    background: #8ab4f8;
+    border-color: #8ab4f8;
+    color: #202124;
+    font-weight: 700;
+  }
+
+  .guided-previous:disabled {
+    cursor: default;
+    opacity: 0.38;
+  }
+
   .sidebar {
     background: var(--debug-panel);
     border-left: 1px solid var(--debug-border);
@@ -721,7 +902,8 @@ export const debuggerStyles: string = `
     }
 
     .toolbar {
-      justify-content: center;
+      justify-content: flex-start;
+      overflow-x: auto;
     }
 
     .workspace {
