@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   TsTeachingDebuggerElement,
 } from "../src/ts-teaching-debugger";
+import { annotateCode } from "../src/teaching";
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -98,5 +99,53 @@ console.log(answer);`;
     expect(
       element.shadowRoot?.querySelector(".statusbar-state")?.getAttribute("data-status"),
     ).toBe("paused");
+  });
+
+  it("navigates an optional guided walkthrough in both directions", async () => {
+    const annotated = annotateCode(
+      "const first = 1;\nconst second = first + 1;",
+      {
+        1: {
+          title: "Create the first value",
+          explanation: "This establishes the starting value.",
+          question: "What value is stored?",
+          solution: "The value is `1`.",
+        },
+        2: {
+          title: "Derive the second value",
+          explanation: "This builds on `first`.",
+        },
+      },
+    );
+    const element = document.createElement(
+      "ts-teaching-debugger",
+    ) as TsTeachingDebuggerElement;
+    element.code = annotated.code;
+    element.guidedMode = true;
+    document.body.append(element);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const title = element.shadowRoot?.querySelector(".guided-title");
+    const previous = element.shadowRoot?.querySelector<HTMLButtonElement>(
+      ".guided-previous",
+    );
+    const next = element.shadowRoot?.querySelector<HTMLButtonElement>(
+      ".guided-next",
+    );
+
+    expect(element.shadowRoot?.querySelector(".guided-overlay")?.hasAttribute("hidden")).toBe(
+      false,
+    );
+    expect(title?.textContent).toBe("Create the first value");
+    expect(previous?.disabled).toBe(true);
+    expect(element.shadowRoot?.querySelector(".guided-question")?.hasAttribute("hidden")).toBe(
+      false,
+    );
+
+    next?.click();
+    expect(title?.textContent).toBe("Derive the second value");
+    expect(next?.textContent).toBe("Finish");
+    previous?.click();
+    expect(title?.textContent).toBe("Create the first value");
   });
 });
