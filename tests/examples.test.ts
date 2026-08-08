@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { DebuggerEngine } from "../src/core/engine";
 import { algorithmExamples } from "../src/examples";
+import { teachingNotesByExample } from "../src/example-notes";
 
 describe("algorithm examples", () => {
   for (const example of algorithmExamples) {
@@ -11,6 +12,20 @@ describe("algorithm examples", () => {
 
       expect(result.status, result.error?.message).toBe("complete");
       expect(onConsole).toHaveBeenCalled();
+    });
+
+    it(`explains every reachable line in ${example.title}`, async () => {
+      const engine = new DebuggerEngine(example.code);
+      const notes = teachingNotesByExample[example.id];
+      let result = await engine.advance("into");
+
+      for (let step = 0; step < 5000 && result.status === "paused"; step += 1) {
+        const line = result.point?.range.startLine;
+        expect(notes?.[line ?? -1], `Missing teaching note for ${example.id}:${line}`).toBeDefined();
+        result = await engine.advance("into");
+      }
+
+      expect(result.status, result.error?.message).toBe("complete");
     });
   }
 });
