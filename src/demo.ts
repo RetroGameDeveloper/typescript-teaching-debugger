@@ -5,7 +5,6 @@ import {
   type AlgorithmExample,
 } from "./examples";
 import type { TsTeachingDebuggerElement } from "./ts-teaching-debugger";
-import { teachingNotesByExample } from "./example-notes";
 
 type CategoryFilter = "All" | AlgorithmCategory;
 
@@ -76,7 +75,6 @@ function selectExample(example: AlgorithmExample): void {
   if (teachingDebugger) {
     teachingDebugger.code = example.code;
     teachingDebugger.breakpoints = example.breakpoints;
-    teachingDebugger.teachingNotes = teachingNotesByExample[example.id] ?? {};
   }
 
   renderExampleList();
