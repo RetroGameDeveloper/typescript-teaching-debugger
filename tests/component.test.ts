@@ -78,4 +78,25 @@ console.log(answer);`;
       "42",
     );
   });
+
+  it("automatically resets after execution completes", async () => {
+    const element = document.createElement(
+      "ts-teaching-debugger",
+    ) as TsTeachingDebuggerElement;
+    element.code = "console.log('done');";
+    element.autoResetDelay = 0;
+    document.body.append(element);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const resetPause = new Promise<void>((resolve) => {
+      element.addEventListener("debugger-paused", () => resolve(), { once: true });
+    });
+    const complete = await element.resume();
+
+    expect(complete.status).toBe("complete");
+    await resetPause;
+    expect(
+      element.shadowRoot?.querySelector(".statusbar-state")?.getAttribute("data-status"),
+    ).toBe("paused");
+  });
 });
