@@ -80,17 +80,6 @@ const componentTemplate = `
       <div class="file-tab"><span class="ts-badge">TS</span><span>lesson.ts</span></div>
       <div class="mode-badge"><span class="mode-dot"></span>AST runtime</div>
     </header>
-    <div class="toolbar" role="toolbar" aria-label="Debugger controls">
-      <button class="tool-button" data-command="continue" type="button" aria-label="Resume execution" title="Resume (F8)"></button>
-      <button class="tool-button" data-command="over" type="button" aria-label="Step over" title="Step over (F10)"></button>
-      <button class="tool-button" data-command="into" type="button" aria-label="Step into" title="Step into (F11)"></button>
-      <button class="tool-button" data-command="out" type="button" aria-label="Step out" title="Step out (Shift+F11)"></button>
-      <span class="toolbar-separator" aria-hidden="true"></span>
-      <button class="tool-button" data-command="restart" type="button" aria-label="Restart" title="Restart (Ctrl+Shift+F5)"></button>
-      <span class="toolbar-separator" aria-hidden="true"></span>
-      <button class="view-toggle" data-view="guided" type="button" aria-pressed="true">Guided</button>
-      <div class="pause-summary" data-status="ready">Ready to evaluate TypeScript</div>
-    </div>
     <div class="workspace">
       <section class="editor-pane" aria-label="TypeScript source">
         <div class="editor-host"></div>
@@ -103,7 +92,6 @@ const componentTemplate = `
             </header>
             <div class="guided-body">
               <h2 class="guided-title" id="guided-title"></h2>
-              <div class="guided-documentation"></div>
               <div class="guided-question" hidden>
                 <p class="question-label">Question</p>
                 <div class="guided-question-prompt"></div>
@@ -114,6 +102,7 @@ const componentTemplate = `
                   <div class="guided-solution-copy"></div>
                 </div>
               </div>
+              <div class="guided-documentation"></div>
             </div>
             <footer class="guided-footer">
               <button class="guided-previous" type="button">Previous</button>
@@ -123,11 +112,27 @@ const componentTemplate = `
         </div>
       </section>
       <aside class="sidebar" aria-label="Debugger details">
+        <div class="sidebar-control-panel">
+          <div class="runtime-sidebar-controls" role="toolbar" aria-label="Debugger controls">
+            <button class="tool-button" data-command="continue" type="button" aria-label="Resume execution" title="Resume (F8)"></button>
+            <button class="tool-button" data-command="over" type="button" aria-label="Step over" title="Step over (F10)"></button>
+            <button class="tool-button" data-command="into" type="button" aria-label="Step into" title="Step into (F11)"></button>
+            <button class="tool-button" data-command="out" type="button" aria-label="Step out" title="Step out (Shift+F11)"></button>
+            <span class="toolbar-separator" aria-hidden="true"></span>
+            <button class="tool-button" data-command="restart" type="button" aria-label="Restart" title="Restart (Ctrl+Shift+F5)"></button>
+            <button class="view-toggle" data-view="guided" type="button" aria-pressed="true">Guided</button>
+          </div>
+          <div class="guided-sidebar-controls" role="group" aria-label="Guided navigation" hidden>
+            <button class="sidebar-guided-previous" type="button">Previous</button>
+            <span class="sidebar-guided-progress"></span>
+            <button class="sidebar-guided-next" type="button">Next</button>
+            <button class="sidebar-guided-exit" type="button">Exit</button>
+          </div>
+          <div class="pause-summary" data-status="ready">Ready to evaluate TypeScript</div>
+        </div>
         <div class="teaching-card">
           <p class="teaching-kicker">Why this line exists</p>
           <p class="teaching-title">Ready to run</p>
-          <p class="teaching-copy">Execution pauses before each executable AST node. Type-only syntax is parsed but skipped at runtime.</p>
-          <span class="ast-token">Program</span>
           <div class="teaching-question" hidden>
             <p class="question-label">Question</p>
             <div class="question-prompt"></div>
@@ -138,6 +143,8 @@ const componentTemplate = `
               <div class="solution-copy"></div>
             </div>
           </div>
+          <div class="teaching-copy">Execution pauses before each executable AST node. Type-only syntax is parsed but skipped at runtime.</div>
+          <span class="ast-token">Program</span>
         </div>
         <section class="panel-section" data-section="scope" data-collapsed="false">
           <button class="section-toggle" type="button" aria-expanded="true"><span data-chevron></span>Scope<span class="section-count">0</span></button>
@@ -431,8 +438,10 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this.guidedIndex = 0;
     this.guidedQuestionSelection = undefined;
     this.guidedSolutionVisible = false;
-    if (this.shadowRoot) {
+    if (this.shadowRoot && this.editor) {
+      setActivePoint(this.editor, this.guidedEnabled ? undefined : this.snapshot.point);
       this.renderGuidedDialog();
+      this.renderTeachingCard();
     }
     this.renderViewToggles();
   }
@@ -619,8 +628,14 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this.requiredElement<HTMLButtonElement>(".solution-toggle").addEventListener(
       "click",
       () => {
-        if (this.questionSelection === undefined) return;
-        this.solutionVisible = !this.solutionVisible;
+        if (this.guidedEnabled) {
+          if (this.guidedQuestionSelection === undefined) return;
+          this.guidedSolutionVisible = !this.guidedSolutionVisible;
+          this.renderGuidedDialog();
+        } else {
+          if (this.questionSelection === undefined) return;
+          this.solutionVisible = !this.solutionVisible;
+        }
         this.renderTeachingCard();
       },
       { signal },
@@ -646,12 +661,33 @@ export class TsTeachingDebuggerElement extends HTMLElement {
       { signal },
     );
 
+    this.requiredElement<HTMLButtonElement>(".sidebar-guided-previous").addEventListener(
+      "click",
+      () => this.moveGuidedStep(-1),
+      { signal },
+    );
+
+    this.requiredElement<HTMLButtonElement>(".sidebar-guided-next").addEventListener(
+      "click",
+      () => this.moveGuidedStep(1),
+      { signal },
+    );
+
+    this.requiredElement<HTMLButtonElement>(".sidebar-guided-exit").addEventListener(
+      "click",
+      () => {
+        this.guidedMode = false;
+      },
+      { signal },
+    );
+
     this.requiredElement<HTMLButtonElement>(".guided-solution-toggle").addEventListener(
       "click",
       () => {
         if (this.guidedQuestionSelection === undefined) return;
         this.guidedSolutionVisible = !this.guidedSolutionVisible;
         this.renderGuidedDialog();
+        this.renderTeachingCard();
       },
       { signal },
     );
@@ -774,6 +810,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this.guidedQuestionSelection = undefined;
     this.guidedSolutionVisible = false;
     this.renderGuidedDialog();
+    this.renderTeachingCard();
   }
 
   private renderGuidedDialog(): void {
@@ -793,13 +830,13 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this.requiredElement<HTMLElement>(".guided-title").textContent = comment.title;
     this.requiredElement<HTMLElement>(".guided-progress").textContent =
       `${this.guidedIndex + 1} / ${this.guidedComments.length}`;
-    renderMarkdown(
-      this.requiredElement<HTMLElement>(".guided-documentation"),
-      comment.explanation,
-    );
+    const documentation = this.requiredElement<HTMLElement>(".guided-documentation");
 
     const question = this.requiredElement<HTMLElement>(".guided-question");
     question.hidden = !comment.question;
+    documentation.hidden = Boolean(comment.question);
+
+    if (!comment.question) renderMarkdown(documentation, comment.explanation);
 
     if (!question.hidden && comment.question) {
       renderMarkdown(
@@ -815,6 +852,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
           this.guidedQuestionSelection = selection;
           this.guidedSolutionVisible = false;
           this.renderGuidedDialog();
+          this.renderTeachingCard();
         },
       );
     }
@@ -846,6 +884,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     const next = this.requiredElement<HTMLButtonElement>(".guided-next");
     next.textContent =
       this.guidedIndex === this.guidedComments.length - 1 ? "Finish" : "Next";
+    this.renderViewToggles();
     this.positionGuidedDialog(guidedLine);
   }
 
@@ -1033,7 +1072,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   }
 
   private render(): void {
-    setActivePoint(this.editor!, this.snapshot.point);
+    setActivePoint(this.editor!, this.guidedEnabled ? undefined : this.snapshot.point);
     this.renderToolbar();
     this.renderTeachingCard();
     this.renderScope();
@@ -1048,6 +1087,18 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     if (!this.shadowRoot) return;
     const guided = this.requiredElement<HTMLButtonElement>('[data-view="guided"]');
     guided.setAttribute("aria-pressed", String(this.guidedEnabled));
+    this.requiredElement<HTMLElement>(".runtime-sidebar-controls").hidden =
+      this.guidedEnabled;
+    this.requiredElement<HTMLElement>(".guided-sidebar-controls").hidden =
+      !this.guidedEnabled;
+    this.requiredElement<HTMLElement>(".sidebar-guided-progress").textContent =
+      `${Math.min(this.guidedIndex + 1, this.guidedComments.length)} / ${this.guidedComments.length}`;
+    this.requiredElement<HTMLButtonElement>(".sidebar-guided-previous").disabled =
+      this.guidedIndex === 0;
+    const next = this.requiredElement<HTMLButtonElement>(".sidebar-guided-next");
+    next.disabled = this.guidedComments.length === 0;
+    next.textContent =
+      this.guidedIndex === this.guidedComments.length - 1 ? "Finish" : "Next";
   }
 
   private renderToolbar(): void {
@@ -1096,6 +1147,16 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     const token = this.requiredElement<HTMLElement>(".ast-token");
     const question = this.requiredElement<HTMLElement>(".teaching-question");
 
+    if (this.guidedEnabled) {
+      const comment = this.guidedComments[this.guidedIndex];
+      if (comment) {
+        this.renderGuidedTeachingCard(comment, title, copy, token, question);
+        return;
+      }
+    }
+
+    copy.hidden = false;
+
     if (this.snapshot.status === "error") {
       title.textContent = "Execution stopped";
       copy.textContent = this.snapshot.error?.message ?? "An unknown error occurred.";
@@ -1130,6 +1191,62 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     );
     token.textContent = `${point.nodeType} - ${point.range.startLine}:${point.range.startColumn + 1}`;
     this.renderQuestion(lessonNote, point.range.startLine);
+  }
+
+  private renderGuidedTeachingCard(
+    comment: TeachingComment,
+    title: HTMLElement,
+    copy: HTMLElement,
+    token: HTMLElement,
+    question: HTMLElement,
+  ): void {
+    title.textContent = comment.title;
+    token.textContent = `Guided step ${this.guidedIndex + 1} / ${this.guidedComments.length}`;
+
+    if (!comment.question) {
+      question.hidden = true;
+      copy.hidden = false;
+      renderMarkdown(copy, comment.explanation);
+      return;
+    }
+
+    copy.hidden = true;
+    question.hidden = false;
+    renderMarkdown(
+      this.requiredElement<HTMLElement>(".question-prompt"),
+      comment.question,
+    );
+    this.renderChoiceOptions(
+      this.requiredElement<HTMLElement>(".question-choices"),
+      comment,
+      this.guidedQuestionSelection,
+      this.guidedSolutionVisible,
+      (selection) => {
+        this.guidedQuestionSelection = selection;
+        this.guidedSolutionVisible = false;
+        this.renderGuidedDialog();
+        this.renderTeachingCard();
+      },
+    );
+    const solution = this.requiredElement<HTMLElement>(".teaching-solution");
+    solution.hidden = !this.guidedSolutionVisible;
+    const toggle = this.requiredElement<HTMLButtonElement>(".solution-toggle");
+    toggle.disabled = this.guidedQuestionSelection === undefined;
+    toggle.textContent = this.guidedSolutionVisible
+      ? "Hide explanation"
+      : "Check answer";
+
+    if (this.guidedSolutionVisible) {
+      const assessment = multipleChoiceAssessment(comment);
+      const correct = this.guidedQuestionSelection === assessment.answer;
+      solution.dataset.result = correct ? "correct" : "incorrect";
+      this.requiredElement<HTMLElement>(".teaching-solution .solution-label").textContent =
+        correct ? "Correct" : "Not quite";
+      renderMarkdown(
+        this.requiredElement<HTMLElement>(".solution-copy"),
+        comment.solution ?? comment.explanation,
+      );
+    }
   }
 
   private renderQuestion(note: TeachingNote | undefined, line: number): void {
