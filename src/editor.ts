@@ -10,6 +10,7 @@ import {
   StateEffect,
   StateField,
   type Extension,
+  type Range,
 } from "@codemirror/state";
 import {
   Decoration,
@@ -74,6 +75,14 @@ const guidedRangeEffect = StateEffect.define<ActiveRange | null>({
 });
 
 const hiddenCommentsEffect = StateEffect.define<EditorRange[]>({
+  map: (ranges, mapping) =>
+    ranges.map((range) => ({
+      from: mapping.mapPos(range.from),
+      to: mapping.mapPos(range.to),
+    })),
+});
+
+const markdownCommentsEffect = StateEffect.define<EditorRange[]>({
   map: (ranges, mapping) =>
     ranges.map((range) => ({
       from: mapping.mapPos(range.from),
@@ -206,6 +215,84 @@ const hiddenCommentsState = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 
+function markdownCommentDecorations(
+  state: EditorState,
+  ranges: EditorRange[],
+): DecorationSet {
+  const decorations: Range<Decoration>[] = [];
+
+  for (const range of ranges) {
+    const source = state.doc.sliceString(range.from, range.to);
+    const headingPattern = /^\s*\*\s+(#{1,6})\s+(.+)$/gm;
+    let match: RegExpExecArray | null;
+
+    while ((match = headingPattern.exec(source))) {
+      const hashes = match[1];
+      if (!hashes) continue;
+      const from = range.from + match.index + match[0].indexOf(hashes);
+      decorations.push(
+        Decoration.mark({
+          class: `cm-comment-heading cm-comment-heading-${hashes.length}`,
+        }).range(from, range.from + match.index + match[0].length),
+      );
+    }
+
+    const boldPattern = /\*\*([^*\n]+)\*\*/g;
+    while ((match = boldPattern.exec(source))) {
+      const inner = match[1];
+      if (!inner) continue;
+      const from = range.from + match.index;
+      decorations.push(
+        Decoration.mark({ class: "cm-comment-delimiter" }).range(from, from + 2),
+        Decoration.mark({ class: "cm-comment-bold" }).range(
+          from + 2,
+          from + 2 + inner.length,
+        ),
+        Decoration.mark({ class: "cm-comment-delimiter" }).range(
+          from + 2 + inner.length,
+          from + 4 + inner.length,
+        ),
+      );
+    }
+
+    const codePattern = /`([^`\n]+)`/g;
+    while ((match = codePattern.exec(source))) {
+      const inner = match[1];
+      if (!inner) continue;
+      const from = range.from + match.index;
+      decorations.push(
+        Decoration.mark({ class: "cm-comment-delimiter" }).range(from, from + 1),
+        Decoration.mark({ class: "cm-comment-code" }).range(
+          from + 1,
+          from + 1 + inner.length,
+        ),
+        Decoration.mark({ class: "cm-comment-delimiter" }).range(
+          from + 1 + inner.length,
+          from + 2 + inner.length,
+        ),
+      );
+    }
+  }
+
+  return Decoration.set(decorations, true);
+}
+
+const markdownCommentsState = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update: (decorations, transaction) => {
+    let next = decorations.map(transaction.changes);
+
+    for (const effect of transaction.effects) {
+      if (effect.is(markdownCommentsEffect)) {
+        next = markdownCommentDecorations(transaction.state, effect.value);
+      }
+    }
+
+    return next;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
 const guidedRangeState = StateField.define<DecorationSet>({
   create: () => Decoration.none,
   update: (decorations, transaction) => {
@@ -297,6 +384,7 @@ export function createEditor({
       breakpointGutter(onBreakpointsChange),
       activeRangeState,
       hiddenCommentsState,
+      markdownCommentsState,
       guidedRangeState,
       highlightSpecialChars(),
       drawSelection(),
@@ -404,6 +492,33 @@ export function createEditor({
             backgroundColor: "rgba(197, 138, 249, 0.18)",
             borderBottom: "1px solid rgba(197, 138, 249, 0.78)",
           },
+          ".cm-comment-heading": {
+            color: "#e8eaed",
+            fontStyle: "normal",
+            fontWeight: "700",
+          },
+          ".cm-comment-heading-1, .cm-comment-heading-2": {
+            fontSize: "1.16em",
+            letterSpacing: "-0.01em",
+          },
+          ".cm-comment-heading-3, .cm-comment-heading-4": {
+            color: "#c7a5f7",
+            fontSize: "1.06em",
+          },
+          ".cm-comment-bold": {
+            color: "#e8eaed",
+            fontStyle: "normal",
+            fontWeight: "700",
+          },
+          ".cm-comment-code": {
+            backgroundColor: "rgba(138, 180, 248, 0.13)",
+            borderRadius: "3px",
+            color: "#8ab4f8",
+            fontStyle: "normal",
+          },
+          ".cm-comment-delimiter": {
+            opacity: "0.45",
+          },
           ".cm-selectionBackground, ::selection": {
             backgroundColor: "rgba(138, 180, 248, 0.27) !important",
           },
@@ -497,7 +612,10 @@ export function setCommentVisibility(
   visible: boolean,
 ): void {
   view.dispatch({
-    effects: hiddenCommentsEffect.of(visible ? [] : ranges),
+    effects: [
+      hiddenCommentsEffect.of(visible ? [] : ranges),
+      markdownCommentsEffect.of(ranges),
+    ],
   });
 }
 
