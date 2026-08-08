@@ -1,4 +1,5 @@
 export type AlgorithmCategory =
+  | "Compilers"
   | "Dynamic programming"
   | "Graphs"
   | "Recursion"
@@ -17,6 +18,299 @@ export interface AlgorithmExample {
 }
 
 export const algorithmExamples: AlgorithmExample[] = [
+  {
+    id: "cfg-reverse-postorder",
+    title: "CFG reverse postorder",
+    category: "Compilers",
+    description: "Order reachable basic blocks so predecessors usually appear before successors.",
+    timeComplexity: "O(V + E)",
+    spaceComplexity: "O(V)",
+    breakpoints: [7, 15],
+    code: `type CFG = Record<string, string[]>;
+
+function reversePostorder(graph: CFG, entry: string): string[] {
+  const visited: Record<string, boolean> = {};
+  const postorder: string[] = [];
+
+  function visit(block: string): void {
+    visited[block] = true;
+
+    for (const successor of graph[block]) {
+      if (!visited[successor]) {
+        visit(successor);
+      }
+    }
+
+    postorder.push(block);
+  }
+
+  visit(entry);
+  const result: string[] = [];
+
+  for (let index = postorder.length - 1; index >= 0; index -= 1) {
+    result.push(postorder[index]);
+  }
+
+  return result;
+}
+
+const cfg: CFG = {
+  entry: ["header"],
+  header: ["body", "exit"],
+  body: ["header"],
+  exit: [],
+};
+
+console.log("Reverse postorder:", reversePostorder(cfg, "entry"));`,
+  },
+  {
+    id: "iterative-dominators",
+    title: "Iterative dominators",
+    category: "Compilers",
+    description: "Solve dominator sets to a fixed point over the control-flow graph.",
+    timeComplexity: "O(V^2 * E)",
+    spaceComplexity: "O(V^2)",
+    breakpoints: [25, 37],
+    code: `type Predecessors = Record<string, string[]>;
+type BlockSet = Record<string, boolean>;
+
+function intersect(left: BlockSet, right: BlockSet): BlockSet {
+  const result: BlockSet = {};
+
+  for (const block of Object.keys(left)) {
+    if (left[block] && right[block]) {
+      result[block] = true;
+    }
+  }
+
+  return result;
+}
+
+function dominators(
+  blocks: string[],
+  predecessors: Predecessors,
+  entry: string,
+): Record<string, BlockSet> {
+  const result: Record<string, BlockSet> = {};
+  const allBlocks: BlockSet = {};
+
+  for (const block of blocks) {
+    allBlocks[block] = true;
+  }
+
+  for (const block of blocks) {
+    result[block] = block === entry ? { entry: true } : Object.assign({}, allBlocks);
+  }
+
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+
+    for (const block of blocks) {
+      if (block === entry) {
+        continue;
+      }
+
+      const incoming = predecessors[block];
+      let next = Object.assign({}, result[incoming[0]]);
+
+      for (let index = 1; index < incoming.length; index += 1) {
+        next = intersect(next, result[incoming[index]]);
+      }
+
+      next[block] = true;
+
+      if (Object.keys(next).length !== Object.keys(result[block]).length) {
+        result[block] = next;
+        changed = true;
+      }
+    }
+  }
+
+  return result;
+}
+
+const blocks = ["entry", "left", "right", "join", "exit"];
+const predecessors: Predecessors = {
+  entry: [], left: ["entry"], right: ["entry"],
+  join: ["left", "right"], exit: ["join"],
+};
+console.log("Dominators:", dominators(blocks, predecessors, "entry"));`,
+  },
+  {
+    id: "dominance-frontiers",
+    title: "Dominance frontiers",
+    category: "Compilers",
+    description: "Find CFG joins where a block's dominance stops being strict.",
+    timeComplexity: "O(VE)",
+    spaceComplexity: "O(V + E)",
+    breakpoints: [12, 18],
+    code: `type Predecessors = Record<string, string[]>;
+
+function dominanceFrontiers(
+  blocks: string[],
+  predecessors: Predecessors,
+  immediateDominator: Record<string, string>,
+): Record<string, string[]> {
+  const frontier: Record<string, string[]> = {};
+
+  for (const block of blocks) {
+    frontier[block] = [];
+  }
+
+  for (const join of blocks) {
+    if (predecessors[join].length < 2) {
+      continue;
+    }
+
+    for (const predecessor of predecessors[join]) {
+      let runner = predecessor;
+
+      while (runner !== immediateDominator[join]) {
+        if (!frontier[runner].includes(join)) {
+          frontier[runner].push(join);
+        }
+        runner = immediateDominator[runner];
+      }
+    }
+  }
+
+  return frontier;
+}
+
+const blocks = ["entry", "left", "right", "join", "exit"];
+const predecessors: Predecessors = {
+  entry: [], left: ["entry"], right: ["entry"],
+  join: ["left", "right"], exit: ["join"],
+};
+const immediateDominator = {
+  entry: "entry", left: "entry", right: "entry",
+  join: "entry", exit: "join",
+};
+console.log("Dominance frontiers:",
+  dominanceFrontiers(blocks, predecessors, immediateDominator));`,
+  },
+  {
+    id: "cytron-phi-placement",
+    title: "Cytron phi placement",
+    category: "Compilers",
+    description: "Place minimal SSA phi functions using iterated dominance frontiers.",
+    timeComplexity: "O(defs + phi placements)",
+    spaceComplexity: "O(V + phi placements)",
+    breakpoints: [13, 19],
+    code: `type BlockLists = Record<string, string[]>;
+
+function placePhiFunctions(
+  variables: string[],
+  definitionBlocks: BlockLists,
+  dominanceFrontier: BlockLists,
+): Record<string, string[]> {
+  const phi: Record<string, string[]> = {};
+
+  for (const variable of variables) {
+    const worklist = definitionBlocks[variable].slice();
+    const queued: Record<string, boolean> = {};
+
+    for (const block of worklist) {
+      queued[block] = true;
+    }
+
+    while (worklist.length > 0) {
+      const block = worklist.shift();
+
+      if (block === undefined) {
+        break;
+      }
+
+      for (const join of dominanceFrontier[block]) {
+        if (phi[join] === undefined) {
+          phi[join] = [];
+        }
+
+        if (!phi[join].includes(variable)) {
+          phi[join].push(variable);
+
+          if (!queued[join]) {
+            queued[join] = true;
+            worklist.push(join);
+          }
+        }
+      }
+    }
+  }
+
+  return phi;
+}
+
+const variables = ["x", "y"];
+const definitions: BlockLists = {
+  x: ["left", "right"],
+  y: ["entry", "loopBody"],
+};
+const frontier: BlockLists = {
+  entry: [], left: ["join"], right: ["join"],
+  join: [], loopBody: ["loopHeader"], loopHeader: ["loopHeader"],
+};
+console.log("Phi functions:", placePhiFunctions(variables, definitions, frontier));`,
+  },
+  {
+    id: "ssa-renaming",
+    title: "SSA variable renaming",
+    category: "Compilers",
+    description: "Rename definitions and uses while walking the dominator tree.",
+    timeComplexity: "O(instructions + phi operands)",
+    spaceComplexity: "O(instructions)",
+    breakpoints: [24, 31],
+    code: `type Statements = Record<string, string[][]>;
+type Tree = Record<string, string[]>;
+
+function renameToSSA(
+  block: string,
+  tree: Tree,
+  statements: Statements,
+  counters: Record<string, number>,
+  stacks: Record<string, string[]>,
+): void {
+  const pushed: string[] = [];
+
+  for (const statement of statements[block]) {
+    const kind = statement[0];
+    const variable = statement[1];
+
+    if (kind === "use") {
+      const versions = stacks[variable];
+      statement[1] = versions[versions.length - 1];
+    } else {
+      counters[variable] += 1;
+      const version = variable + counters[variable];
+      stacks[variable].push(version);
+      statement[1] = version;
+      pushed.push(variable);
+    }
+  }
+
+  for (const child of tree[block]) {
+    renameToSSA(child, tree, statements, counters, stacks);
+  }
+
+  for (let index = pushed.length - 1; index >= 0; index -= 1) {
+    stacks[pushed[index]].pop();
+  }
+}
+
+const statements: Statements = {
+  entry: [["def", "x"]],
+  left: [["use", "x"], ["def", "x"]],
+  right: [["use", "x"]],
+  join: [["def", "x"], ["use", "x"]],
+};
+const dominatorTree: Tree = {
+  entry: ["left", "right", "join"], left: [], right: [], join: [],
+};
+renameToSSA("entry", dominatorTree, statements, { x: 0 }, { x: [] });
+console.log("Renamed statements:", statements);`,
+  },
   {
     id: "linear-search",
     title: "Linear search",
