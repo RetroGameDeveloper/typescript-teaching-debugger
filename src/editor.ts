@@ -20,6 +20,7 @@ import {
   gutter,
   highlightActiveLine,
   highlightSpecialChars,
+  hoverTooltip,
   lineNumbers,
   rectangularSelection,
   type DecorationSet,
@@ -232,6 +233,7 @@ function breakpointGutter(onChange: (lines: number[]) => void): Extension {
 
 export interface CreateEditorOptions {
   code: string;
+  createHover: (identifier: string, position: number) => HTMLElement | undefined;
   onBreakpointsChange: (lines: number[]) => void;
   onChange: (code: string) => void;
   parent: HTMLElement;
@@ -240,6 +242,7 @@ export interface CreateEditorOptions {
 
 export function createEditor({
   code,
+  createHover,
   onBreakpointsChange,
   onChange,
   parent,
@@ -259,6 +262,32 @@ export function createEditor({
       rectangularSelection(),
       highlightActiveLine(),
       bracketMatching(),
+      hoverTooltip((view, position) => {
+        const line = view.state.doc.lineAt(position);
+        let from = position;
+        let to = position;
+
+        while (from > line.from && /[\w$]/.test(view.state.doc.sliceString(from - 1, from))) {
+          from -= 1;
+        }
+
+        while (to < line.to && /[\w$]/.test(view.state.doc.sliceString(to, to + 1))) {
+          to += 1;
+        }
+
+        if (from === to) return null;
+        const identifier = view.state.doc.sliceString(from, to);
+        const dom = createHover(identifier, from);
+
+        if (!dom) return null;
+
+        return {
+          above: true,
+          create: () => ({ dom }),
+          end: to,
+          pos: from,
+        };
+      }),
       syntaxHighlighting(chromeDarkHighlightStyle),
       javascript({ typescript: true }),
       EditorState.readOnly.of(readOnly),
