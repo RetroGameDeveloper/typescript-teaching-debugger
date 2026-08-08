@@ -18,7 +18,7 @@ An embeddable custom element that teaches synchronous TypeScript execution using
 * Curriculum groups ordered from fundamentals through compiler algorithms
 * Live variable-value and Markdown documentation hovers
 * Automatic restart after a completed run
-* Unified lesson walkthrough in the right sidebar, or an optional bottom panel
+* Subtle question checks in the right sidebar, or an optional bottom panel
 * Teaching comments fold in the editor and expand on the active line
 * Runtime controls in the right sidebar
 
@@ -73,7 +73,7 @@ if (teachingDebugger) {
 <ts-teaching-debugger id="teaching-debugger"></ts-teaching-debugger>
 ```
 
-Move the "Why this line exists" panel under the editor with `teaching-placement="bottom"` or `teachingPlacement = "bottom"`.
+Move the question panel under the editor with `teaching-placement="bottom"` or `teachingPlacement = "bottom"`.
 
 For static snippets, an inert child script is also supported:
 
@@ -105,6 +105,8 @@ Properties:
 * `teachingNotes: Record<number, TeachingNote>` - Markdown lesson notes keyed by the source line they explain; use this to keep notes out of the displayed TypeScript
 * `breakpoints: number[]` - all active permanent and one-time breakpoints
 * `oneTimeBreakpoints: number[]` - breakpoints removed after their first pause
+* `breakpointsEnabled: boolean` - temporarily activate or deactivate user breakpoints without removing them
+* `pauseOnTeachingNotes: boolean` - pause the first time each lesson note is executed; defaults to `true`
 * `autoResetDelay: number` - milliseconds before reset; use `-1` to disable
 * `teachingPlacement: "bottom" | "sidebar"` - where the "Why this line exists" panel is shown; defaults to `"sidebar"`
 
@@ -199,11 +201,12 @@ value preview; variable and parameter hovers retain it.
 The initial and reset state displays the first `# Problem` block in the right
 teaching panel. The selected source line is focused and other lines are dimmed.
 
-Executable teaching steps are installed as automatic one-time breakpoints.
-Resume advances to the next lesson line, removes its breakpoint, and synchronizes
-the right panel to the reached step. In the gutter, clicking an empty line adds a
-permanent breakpoint, clicking it again converts it to one-time, and clicking a
-third time removes it.
+Resume pauses the first time each executable lesson note is reached and
+synchronizes the right panel to that step. These lesson pauses are tracked
+separately, so they do not appear in the breakpoint gutter, API, or panel. The
+toolbar can temporarily ignore lesson-note pauses or deactivate user breakpoints.
+In the gutter, clicking an empty line adds a permanent breakpoint, clicking it
+again converts it to one-time, and clicking a third time removes it.
 
 Methods:
 

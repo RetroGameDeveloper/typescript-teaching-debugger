@@ -210,20 +210,42 @@ export function annotateCode(
   sourceNotes: TeachingNotes,
   questionLines: Iterable<number> = [],
 ): AnnotatedCode {
-  const questions = new Set(questionLines);
+  const preparedNotes = prepareTeachingNotes(code, sourceNotes, questionLines);
   const output: string[] = [];
   const lineMap: Record<number, number> = {};
 
   const sourceLines = code.split("\n");
   sourceLines.forEach((line, index) => {
     const sourceLine = index + 1;
-    const sourceNote = sourceNotes[sourceLine];
+    const sourceNote = preparedNotes[sourceLine];
 
     if (sourceNote) {
-      let note: TeachingNote = questions.has(sourceLine)
-        ? multipleChoiceAssessment(sourceNote, sourceLine)
+      const indentation = line.match(/^\s*/)?.[0] ?? "";
+      output.push(...commentBody(sourceNote, indentation));
+    }
+
+    lineMap[sourceLine] = output.length + 1;
+    output.push(line);
+  });
+
+  return { code: output.join("\n"), lineMap };
+}
+
+export function prepareTeachingNotes(
+  code: string,
+  sourceNotes: TeachingNotes,
+  questionLines: Iterable<number> = [],
+): TeachingNotes {
+  const questions = new Set(questionLines);
+  const sourceLines = code.split("\n");
+
+  return Object.fromEntries(
+    Object.entries(sourceNotes).map(([lineText, sourceNote]) => {
+      const line = Number(lineText);
+      let note = questions.has(line)
+        ? multipleChoiceAssessment(sourceNote, line)
         : sourceNote;
-      const signature = functionSignature(sourceLines.slice(index).join("\n"));
+      const signature = functionSignature(sourceLines.slice(line - 1).join("\n"));
       if (signature && !note.arguments) {
         note = {
           ...note,
@@ -232,15 +254,9 @@ export function annotateCode(
           ),
         };
       }
-      const indentation = line.match(/^\s*/)?.[0] ?? "";
-      output.push(...commentBody(note, indentation));
-    }
-
-    lineMap[sourceLine] = output.length + 1;
-    output.push(line);
-  });
-
-  return { code: output.join("\n"), lineMap };
+      return [line, note];
+    }),
+  );
 }
 
 function cleanCommentBody(body: string): string[] {

@@ -10,6 +10,7 @@ import { curriculumGroups } from "./curriculum";
 const teachingDebugger = document.querySelector<TsTeachingDebuggerElement>(
   "#debugger",
 );
+if (teachingDebugger) teachingDebugger.autoResetDelay = -1;
 const exampleList = requiredElement<HTMLElement>("#example-list");
 const exampleCount = requiredElement<HTMLElement>("#example-count");
 const searchInput = requiredElement<HTMLInputElement>("#example-search");
@@ -67,7 +68,6 @@ function selectExample(example: AlgorithmExample): void {
     teachingDebugger.code = example.code;
     teachingDebugger.teachingNotes = example.teachingNotes;
     teachingDebugger.breakpoints = [];
-    teachingDebugger.oneTimeBreakpoints = example.breakpoints;
   }
 
   renderExampleList();

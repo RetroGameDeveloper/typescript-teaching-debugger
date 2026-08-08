@@ -50,13 +50,13 @@ console.log(answer);`;
     expect(completed.status).toBe("paused");
     expect(completed.point?.range.startLine).toBe(12);
     expect(element.shadowRoot?.querySelector(".teaching-title")?.textContent).toBe(
-      "Display the computed answer",
+      "Quick check",
     );
     expect(element.shadowRoot?.querySelector(".teaching-question")?.hasAttribute("hidden")).toBe(
       false,
     );
     expect(element.shadowRoot?.querySelector(".teaching-title")?.textContent).toBe(
-      "Display the computed answer",
+      "Quick check",
     );
 
     const reveal = element.shadowRoot?.querySelector<HTMLButtonElement>(
@@ -99,6 +99,28 @@ console.log(answer);`;
     expect(
       element.shadowRoot?.querySelector(".statusbar-state")?.getAttribute("data-status"),
     ).toBe("ready");
+  });
+
+  it("can remain complete with all source-code dimming removed", async () => {
+    const element = document.createElement(
+      "ts-teaching-debugger",
+    ) as TsTeachingDebuggerElement;
+    element.code = "const value = 1;\nconsole.log(value);";
+    element.teachingNotes = {
+      1: { title: "Create a value", explanation: "Stores `1`." },
+    };
+    element.autoResetDelay = -1;
+    document.body.append(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await element.resume();
+    const completed = await element.resume();
+    expect(completed.status).toBe("complete");
+    expect(
+      element.shadowRoot?.querySelector(".statusbar-state")?.getAttribute("data-status"),
+    ).toBe("complete");
+    expect(element.shadowRoot?.querySelector(".cm-debug-dim")).toBeNull();
+    expect(element.shadowRoot?.querySelector(".cm-guided-dim")).toBeNull();
   });
 
   it("dims the selected lesson step and then the runtime pause", async () => {
@@ -145,20 +167,16 @@ console.log(answer);`;
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(element.shadowRoot?.querySelector(".teaching-title")?.textContent).toBe(
-      "Problem",
+    expect(element.shadowRoot?.querySelector(".teaching-card")?.hasAttribute("hidden")).toBe(
+      true,
     );
-    expect(
-      element.shadowRoot?.querySelector(".teaching-copy strong")?.textContent,
-    ).toBe("Linear search");
     expect(element.shadowRoot?.querySelector(".guided-overlay")).toBeNull();
     expect(element.shadowRoot?.querySelector(".ast-token")).toBeNull();
-    const lessonLines = Object.keys(linearSearch?.teachingNotes ?? {}).map(Number);
-    expect(lessonLines.every((line) => element.breakpoints.includes(line))).toBe(true);
+    expect(element.breakpoints).toEqual([]);
 
     await element.reset();
-    expect(element.shadowRoot?.querySelector(".teaching-title")?.textContent).toBe(
-      "Problem",
+    expect(element.shadowRoot?.querySelector(".teaching-card")?.hasAttribute("hidden")).toBe(
+      true,
     );
   });
 
@@ -194,7 +212,7 @@ console.log(answer);`;
     );
   });
 
-  it("uses one-time lesson breakpoints with resume as next", async () => {
+  it("pauses once on each lesson note without exposing them as breakpoints", async () => {
     const annotated = annotateCode(
       "const first = 1;\nconst second = first + 1;",
       {
@@ -220,21 +238,85 @@ console.log(answer);`;
     const lessonLines = parseTeachingComments(annotated.code).map(({ line }) => line);
 
     expect(element.shadowRoot?.querySelector(".cm-guided-dim")).not.toBeNull();
-    expect(element.oneTimeBreakpoints).toEqual(lessonLines);
+    expect(element.oneTimeBreakpoints).toEqual([]);
+    expect(element.breakpoints).toEqual([]);
     expect(element.shadowRoot?.querySelector(".sidebar-guided-next")).toBeNull();
 
     const first = await element.resume();
     expect(first.point?.range.startLine).toBe(lessonLines[0]);
-    expect(element.oneTimeBreakpoints).not.toContain(lessonLines[0]);
+    expect(element.breakpoints).toEqual([]);
     expect(element.shadowRoot?.querySelector(".teaching-title")?.textContent).toBe(
-      "Create the first value",
+      "Quick check",
     );
 
     const second = await element.resume();
     expect(second.point?.range.startLine).toBe(lessonLines[1]);
-    expect(element.shadowRoot?.querySelector(".teaching-title")?.textContent).toBe(
-      "Derive the second value",
+    expect(element.shadowRoot?.querySelector(".teaching-card")?.hasAttribute("hidden")).toBe(
+      true,
     );
+  });
+
+  it("can independently ignore lesson notes and deactivate breakpoints", async () => {
+    const element = document.createElement(
+      "ts-teaching-debugger",
+    ) as TsTeachingDebuggerElement;
+    element.code = "const first = 1;\nconst second = first + 1;";
+    element.teachingNotes = {
+      1: { title: "First note", explanation: "Explains the first line." },
+    };
+    element.breakpoints = [2];
+    document.body.append(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const notesToggle = element.shadowRoot?.querySelector<HTMLButtonElement>(
+      '[data-debug-toggle="notes"]',
+    );
+    const breakpointsToggle = element.shadowRoot?.querySelector<HTMLButtonElement>(
+      '[data-debug-toggle="breakpoints"]',
+    );
+    notesToggle?.click();
+
+    expect(element.pauseOnTeachingNotes).toBe(false);
+    expect(notesToggle?.getAttribute("aria-pressed")).toBe("true");
+    const breakpointPause = await element.resume();
+    expect(breakpointPause.point?.range.startLine).toBe(2);
+
+    await element.reset();
+    breakpointsToggle?.click();
+    expect(element.breakpointsEnabled).toBe(false);
+    expect(breakpointsToggle?.getAttribute("aria-pressed")).toBe("true");
+    const completed = await element.resume();
+    expect(completed.status).toBe("complete");
+    expect(element.breakpoints).toEqual([2]);
+  });
+
+  it("pauses only once when a noted line executes repeatedly", async () => {
+    const element = document.createElement(
+      "ts-teaching-debugger",
+    ) as TsTeachingDebuggerElement;
+    element.code = `let count = 0;
+while (count < 2) {
+  count += 1;
+}
+console.log(count);`;
+    element.teachingNotes = {
+      3: { title: "Increment the count", explanation: "Runs twice." },
+    };
+    element.autoResetDelay = -1;
+    document.body.append(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const first = await element.resume();
+    expect(first.status).toBe("paused");
+    expect(first.point?.range.startLine).toBe(3);
+
+    const completed = await element.resume();
+    expect(completed.status).toBe("complete");
+
+    await element.reset();
+    const afterReset = await element.resume();
+    expect(afterReset.status).toBe("paused");
+    expect(afterReset.point?.range.startLine).toBe(3);
   });
 
   it("cycles gutter breakpoints from regular to one-time to removed", async () => {

@@ -1,7 +1,6 @@
 import { teachingNotesByExample } from "./example-notes";
-import { problemComment, reorderForLearning } from "./source-layout";
-import { annotateCode } from "./teaching";
-import type { TeachingNotes } from "./teaching";
+import { reorderForLearning } from "./source-layout";
+import { prepareTeachingNotes, type TeachingNotes } from "./teaching";
 
 export type AlgorithmCategory =
   | "Compilers"
@@ -854,41 +853,24 @@ export const algorithmExamples: AlgorithmExample[] = sourceAlgorithmExamples.map
           : noteLines.find((noteLine) => noteLine >= line) ?? line,
     );
 
-    if (example.id === "linear-search") {
-      const introduction = beginnerIntroductions[example.id];
-      return {
-        ...example,
-        breakpoints: questionLines,
-        code: reordered.code,
-        teachingNotes: {
-          ...reorderedNotes,
-          1: {
-            title: "Problem",
-            explanation: `**${example.title}**\n\n${introduction?.analogy ?? example.description}\n\n## How it works\n\n${introduction?.explanation ?? example.description}`,
-          },
-        },
-      };
-    }
-
-    const annotated = annotateCode(
+    const preparedNotes = prepareTeachingNotes(
       reordered.code,
       reorderedNotes,
       questionLines,
     );
     const introduction = beginnerIntroductions[example.id];
-    const prefix = `${problemComment(
-      example.title,
-      introduction?.analogy ?? example.description,
-      introduction?.explanation ?? example.description,
-    )}\n\n`;
-    const prefixLines = prefix.split("\n").length - 1;
 
     return {
       ...example,
-      breakpoints: questionLines.map(
-        (line) => (annotated.lineMap[line] ?? line) + prefixLines,
-      ),
-      code: `${prefix}${annotated.code}`,
+      breakpoints: questionLines,
+      code: reordered.code,
+      teachingNotes: {
+        ...preparedNotes,
+        1: {
+          title: "Problem",
+          explanation: `**${example.title}**\n\n${introduction?.analogy ?? example.description}\n\n## How it works\n\n${introduction?.explanation ?? example.description}`,
+        },
+      },
     };
   },
 );
