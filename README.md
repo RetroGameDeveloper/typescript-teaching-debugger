@@ -16,6 +16,7 @@ An embeddable custom element that teaches synchronous TypeScript execution using
 * Searchable teaching library with 17 classic algorithms
 * Curriculum groups ordered from fundamentals through compiler algorithms
 * Live variable-value and Markdown documentation hovers
+* Automatic restart after a completed run
 
 ## Included lessons
 
@@ -24,6 +25,9 @@ and quick sort; breadth-first and depth-first graph traversal; Dijkstra shortest
 paths; recursive factorial; and Fibonacci tabulation. Every lesson includes
 time and space complexity, suggested breakpoints, and code that can be stepped
 through inside the teaching runtime.
+
+Lessons read from top to bottom as a problem statement, type context, sample
+variables, invocation and output, then hoisted function implementations.
 
 Compiler lessons cover CFG reverse postorder, iterative dominator analysis,
 dominance frontiers, Cytron phi-function placement, and dominator-tree SSA
@@ -92,6 +96,7 @@ Properties:
 
 * `code: string`
 * `breakpoints: number[]`
+* `autoResetDelay: number` - milliseconds before reset; use `-1` to disable
 * `showComments: boolean`
 * `showQuestions: boolean`
 
