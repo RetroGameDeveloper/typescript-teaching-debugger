@@ -18,6 +18,7 @@ An embeddable custom element that teaches synchronous TypeScript execution using
 * Live variable-value and Markdown documentation hovers
 * Automatic restart after a completed run
 * Guided walkthrough by default, with anchored Markdown dialogs
+* Individually collapsible teaching comments, collapsed by default
 
 ## Included lessons
 
@@ -27,8 +28,8 @@ paths; recursive factorial; and Fibonacci tabulation. Every lesson includes
 time and space complexity, suggested breakpoints, and code that can be stepped
 through inside the teaching runtime.
 
-Lessons read from top to bottom as a problem statement, type context, sample
-variables, invocation and output, then hoisted function implementations.
+Lessons read from top to bottom as a beginner problem introduction, type context,
+sample variables and invocation, function implementations, then reported output.
 
 Compiler lessons cover CFG reverse postorder, iterative dominator analysis,
 dominance frontiers, Cytron phi-function placement, and dominator-tree SSA
@@ -146,11 +147,12 @@ each argument. The `### Question` and `### Solution` sections are optional. Cont
 from the current editor source after edits, rather than held in separate lesson
 metadata.
 
-The Comments toolbar control only changes the blocks' editor presentation. When
-shown, headings, bold text, and inline code receive readable Markdown styling in
-the code editor. Their content remains available to the teaching panel and
-hovers when hidden. Questions are always enabled whenever a teaching block
-defines one.
+Teaching comments begin as compact collapsed rows and can be expanded
+individually. The Comments toolbar control expands or collapses every block.
+When expanded, headings, bold text, and inline code receive readable Markdown
+styling in the editor. Full content remains available to the teaching panel,
+guided dialog, and hovers while collapsed. Questions are always enabled whenever
+a teaching block defines one.
 
 Hovering an identifier reads its value from the nearest active scope. If its
 declaration has a Markdown JSDoc teaching block, the same documentation is shown
@@ -162,11 +164,13 @@ act as rendered function docstrings.
 Guided mode starts enabled. Set `guidedMode` to `false`, or use the Guided toolbar
 toggle, to close it. The large walkthrough dialog is anchored above or below the
 selected code. Previous and Next navigate the
-ordered teaching blocks without executing or mutating program state. The dialog
+ordered teaching blocks without executing or mutating program state. Algorithm
+lessons begin with their `# Problem` block, which explains the idea with a simple
+analogy before any code-specific steps. The dialog
 includes Markdown documentation, optional questions, answer input, and solution
 reveal. Finish closes the walkthrough.
 
-By default, steps follow executable Markdown teaching blocks in source order.
+By default, steps follow all Markdown teaching blocks in source order.
 Set `guidedSteps` to source line numbers when a lesson needs a custom route:
 
 ```ts
