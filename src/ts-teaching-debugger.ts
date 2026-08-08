@@ -735,11 +735,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
         return comment ? [comment] : [];
       });
     } else {
-      const sourceLines = this._code.split("\n");
-      this.guidedComments = comments.filter(
-        (comment) =>
-          !(sourceLines[comment.line - 1] ?? "").trimStart().startsWith("/**"),
-      );
+      this.guidedComments = comments;
     }
 
     this.guidedIndex = Math.min(
@@ -774,7 +770,8 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     }
 
     overlay.hidden = false;
-    setGuidedLine(this.editor, comment.line);
+    const guidedLine = this.guidedAnchorLine(comment);
+    setGuidedLine(this.editor, guidedLine);
     this.requiredElement<HTMLElement>(".guided-title").textContent = comment.title;
     this.requiredElement<HTMLElement>(".guided-progress").textContent =
       `${this.guidedIndex + 1} / ${this.guidedComments.length}`;
@@ -814,7 +811,15 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     const next = this.requiredElement<HTMLButtonElement>(".guided-next");
     next.textContent =
       this.guidedIndex === this.guidedComments.length - 1 ? "Finish" : "Next";
-    this.positionGuidedDialog(comment.line);
+    this.positionGuidedDialog(guidedLine);
+  }
+
+  private guidedAnchorLine(comment: TeachingComment): number {
+    if (!this.editor) return comment.line;
+    const target = this.editor.state.doc.line(comment.line).text.trimStart();
+    return target.startsWith("/**")
+      ? this.editor.state.doc.lineAt(comment.from).number
+      : comment.line;
   }
 
   private positionGuidedDialog(lineNumber: number): void {
