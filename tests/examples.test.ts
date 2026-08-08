@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { DebuggerEngine } from "../src/core/engine";
 import { algorithmExamples } from "../src/examples";
-import { teachingNotesByExample } from "../src/example-notes";
+import { teachingNotesFromComments } from "../src/teaching";
 
 describe("algorithm examples", () => {
   for (const example of algorithmExamples) {
@@ -16,7 +16,7 @@ describe("algorithm examples", () => {
 
     it(`explains every reachable line in ${example.title}`, async () => {
       const engine = new DebuggerEngine(example.code);
-      const notes = teachingNotesByExample[example.id];
+      const notes = teachingNotesFromComments(example.code);
       let result = await engine.advance("into");
 
       for (let step = 0; step < 5000 && result.status === "paused"; step += 1) {
@@ -26,6 +26,9 @@ describe("algorithm examples", () => {
       }
 
       expect(result.status, result.error?.message).toBe("complete");
+      expect(
+        example.breakpoints.every((line) => Boolean(notes[line]?.question)),
+      ).toBe(true);
     });
   }
 });
