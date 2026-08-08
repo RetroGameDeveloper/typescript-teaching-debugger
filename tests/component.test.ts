@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   TsTeachingDebuggerElement,
 } from "../src/ts-teaching-debugger";
+import { algorithmExamples } from "../src/examples";
 import { annotateCode } from "../src/teaching";
 
 afterEach(() => {
@@ -36,6 +37,14 @@ console.log(answer);`;
     expect(element.shadowRoot?.querySelector(".shell")).not.toBeNull();
     expect(element.breakpoints).toEqual([12]);
     expect(element.code).toContain("answer: number");
+    const collapsedComment = element.shadowRoot?.querySelector<HTMLButtonElement>(
+      '.cm-comment-toggle[data-expanded="false"]',
+    );
+    expect(collapsedComment).not.toBeNull();
+    collapsedComment?.click();
+    expect(
+      element.shadowRoot?.querySelector('.cm-comment-toggle[data-expanded="true"]'),
+    ).not.toBeNull();
 
     const completed = await element.resume();
     expect(completed.status).toBe("paused");
@@ -92,6 +101,27 @@ console.log(answer);`;
     expect(
       element.shadowRoot?.querySelector(".statusbar-state")?.getAttribute("data-status"),
     ).toBe("paused");
+  });
+
+  it("starts an algorithm lesson with its beginner problem introduction", async () => {
+    const linearSearch = algorithmExamples.find(
+      (example) => example.id === "linear-search",
+    );
+    expect(linearSearch).toBeDefined();
+    const element = document.createElement(
+      "ts-teaching-debugger",
+    ) as TsTeachingDebuggerElement;
+    element.code = linearSearch?.code ?? "";
+    document.body.append(element);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(element.shadowRoot?.querySelector(".guided-title")?.textContent).toBe(
+      "Problem",
+    );
+    expect(
+      element.shadowRoot?.querySelector(".guided-documentation strong")?.textContent,
+    ).toBe("Linear search");
   });
 
   it("navigates an optional guided walkthrough in both directions", async () => {
