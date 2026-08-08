@@ -1,3 +1,7 @@
+import { teachingNotesByExample } from "./example-notes";
+import { problemComment, reorderForLearning } from "./source-layout";
+import { annotateCode } from "./teaching";
+
 export type AlgorithmCategory =
   | "Compilers"
   | "Dynamic programming"
@@ -750,27 +754,37 @@ console.log("Sequence:", result);`,
 export const algorithmExamples: AlgorithmExample[] = sourceAlgorithmExamples.map(
   (example) => {
     const sourceNotes = teachingNotesByExample[example.id] ?? {};
-    const noteLines = Object.keys(sourceNotes).map(Number).sort((left, right) => left - right);
-    const questionLines = example.breakpoints.map(
+    const reordered = reorderForLearning(example.code);
+    const reorderedNotes = Object.fromEntries(
+      Object.entries(sourceNotes).flatMap(([line, note]) => {
+        const reorderedLine = reordered.lineMap[Number(line)];
+        return reorderedLine ? [[reorderedLine, note]] : [];
+      }),
+    );
+    const reorderedBreakpoints = example.breakpoints.map(
+      (line) => reordered.lineMap[line] ?? line,
+    );
+    const noteLines = Object.keys(reorderedNotes).map(Number).sort((left, right) => left - right);
+    const questionLines = reorderedBreakpoints.map(
       (line) =>
-        sourceNotes[line]
+        reorderedNotes[line]
           ? line
           : noteLines.find((noteLine) => noteLine >= line) ?? line,
     );
     const annotated = annotateCode(
-      example.code,
-      sourceNotes,
+      reordered.code,
+      reorderedNotes,
       questionLines,
     );
+    const prefix = `${problemComment(example.title, example.description)}\n\n`;
+    const prefixLines = prefix.split("\n").length - 1;
 
     return {
       ...example,
       breakpoints: questionLines.map(
-        (line) => annotated.lineMap[line] ?? line,
+        (line) => (annotated.lineMap[line] ?? line) + prefixLines,
       ),
-      code: annotated.code,
+      code: `${prefix}${annotated.code}`,
     };
   },
 );
-import { teachingNotesByExample } from "./example-notes";
-import { annotateCode } from "./teaching";
