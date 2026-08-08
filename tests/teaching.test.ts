@@ -53,8 +53,40 @@ describe("Markdown teaching comments", () => {
 
     expect(symbols.map(({ kind, name }) => ({ kind, name }))).toEqual([
       { kind: "function", name: "double" },
+      { kind: "parameter", name: "value" },
       { kind: "variable", name: "result" },
     ]);
     expect(symbols[0]?.note.explanation).toContain("**twice**");
+    expect(symbols[0]?.note.arguments?.value).toBe(
+      "The value supplied to this function.",
+    );
+    expect(symbols[1]?.note.explanation).toBe(
+      "The value supplied to this function.",
+    );
+    expect(annotated.code).toContain("### Arguments");
+    expect(annotated.code).toContain("* `value` - The value supplied to this function.");
+    expect(annotated.code).toContain("\n  /**\n   * ## Store the product");
+  });
+
+  it("parses authored function argument documentation", () => {
+    const code = `/**
+ * ## Find a value
+ * Searches the input from left to right.
+ *
+ * ### Arguments
+ * * \`values\` - The collection being searched.
+ * * \`target\` - The value to locate.
+ */
+function find(values: number[], target: number): number {
+  return values.indexOf(target);
+}`;
+    const symbols = parseTeachingSymbols(code);
+
+    expect(symbols.map(({ kind, name }) => ({ kind, name }))).toEqual([
+      { kind: "function", name: "find" },
+      { kind: "parameter", name: "values" },
+      { kind: "parameter", name: "target" },
+    ]);
+    expect(symbols[2]?.note.explanation).toBe("The value to locate.");
   });
 });
