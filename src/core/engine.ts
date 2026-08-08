@@ -18,6 +18,7 @@ export class DebuggerEngine {
   private readonly maxOperations: number;
   private consoleSequence = 0;
   private current?: ExecutionPoint;
+  private operations = 0;
   private pauseRequested = false;
   private status: DebuggerSnapshot = { status: "ready" };
 
@@ -33,6 +34,10 @@ export class DebuggerEngine {
 
   get snapshot(): DebuggerSnapshot {
     return this.status;
+  }
+
+  get operationIndex(): number {
+    return this.operations;
   }
 
   setBreakpoints(lines: Iterable<number>): void {
@@ -59,6 +64,7 @@ export class DebuggerEngine {
     try {
       for (let operations = 0; operations < this.maxOperations; operations += 1) {
         const result = this.iterator.next();
+        this.operations += 1;
 
         if (result.done) {
           this.current = undefined;
