@@ -104,6 +104,7 @@ export const debuggerStyles: string = `
   }
 
   .tool-button,
+  .view-toggle,
   .section-toggle,
   .breakpoint-remove {
     background: transparent;
@@ -123,12 +124,14 @@ export const debuggerStyles: string = `
   }
 
   .tool-button:hover:not(:disabled),
+  .view-toggle:hover,
   .section-toggle:hover,
   .breakpoint-remove:hover {
     background: rgba(232, 234, 237, 0.08);
   }
 
   .tool-button:focus-visible,
+  .view-toggle:focus-visible,
   .section-toggle:focus-visible,
   .breakpoint-remove:focus-visible {
     outline: 2px solid var(--debug-blue);
@@ -155,6 +158,23 @@ export const debuggerStyles: string = `
     height: 19px;
     margin: 0 5px;
     width: 1px;
+  }
+
+  .view-toggle {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--debug-muted);
+    cursor: pointer;
+    font: 10px/1 var(--debug-mono);
+    height: 24px;
+    padding: 0 7px;
+  }
+
+  .view-toggle[aria-pressed="true"] {
+    background: rgba(138, 180, 248, 0.12);
+    border-color: rgba(138, 180, 248, 0.28);
+    color: var(--debug-blue);
   }
 
   .pause-summary {
@@ -223,6 +243,95 @@ export const debuggerStyles: string = `
     font-size: 11px;
     line-height: 1.5;
     margin: 0;
+  }
+
+  .teaching-copy p,
+  .question-prompt p,
+  .solution-copy p {
+    margin: 0;
+  }
+
+  .teaching-copy p + p,
+  .question-prompt p + p,
+  .solution-copy p + p {
+    margin-top: 6px;
+  }
+
+  .teaching-copy code,
+  .question-prompt code,
+  .solution-copy code {
+    background: rgba(138, 180, 248, 0.11);
+    border-radius: 3px;
+    color: var(--debug-blue);
+    font: 10px/1.4 var(--debug-mono);
+    padding: 1px 3px;
+  }
+
+  .teaching-question {
+    border-top: 1px solid rgba(138, 180, 248, 0.2);
+    margin-top: 11px;
+    padding-top: 10px;
+  }
+
+  .question-label,
+  .solution-label {
+    color: var(--debug-blue);
+    font: 600 9px/1.3 var(--debug-mono);
+    letter-spacing: 0.08em;
+    margin: 0 0 5px;
+    text-transform: uppercase;
+  }
+
+  .question-prompt,
+  .solution-copy {
+    color: var(--debug-text);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .question-response {
+    background: rgba(32, 33, 36, 0.78);
+    border: 1px solid var(--debug-border);
+    border-radius: 4px;
+    color: var(--debug-text);
+    display: block;
+    font: 10px/1.45 var(--debug-mono);
+    margin-top: 8px;
+    min-height: 48px;
+    padding: 6px 7px;
+    resize: vertical;
+    width: 100%;
+  }
+
+  .question-response:focus {
+    border-color: var(--debug-blue-strong);
+    outline: none;
+  }
+
+  .solution-toggle {
+    background: rgba(138, 180, 248, 0.1);
+    border: 1px solid rgba(138, 180, 248, 0.28);
+    border-radius: 4px;
+    color: var(--debug-blue);
+    cursor: pointer;
+    font: 10px/1 var(--debug-mono);
+    margin-top: 7px;
+    padding: 6px 8px;
+  }
+
+  .solution-toggle:hover {
+    background: rgba(138, 180, 248, 0.17);
+  }
+
+  .teaching-solution {
+    background: rgba(129, 201, 149, 0.07);
+    border-left: 2px solid var(--debug-green);
+    margin-top: 9px;
+    padding: 7px 8px;
+  }
+
+  .solution-label {
+    color: var(--debug-green);
   }
 
   .ast-token {
@@ -510,10 +619,6 @@ export const debuggerStyles: string = `
 
     .teaching-card {
       padding: 10px 12px;
-    }
-
-    .teaching-copy {
-      display: none;
     }
 
     .ast-token {
