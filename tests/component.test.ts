@@ -14,6 +14,12 @@ describe("ts-teaching-debugger", () => {
     ) as TsTeachingDebuggerElement;
     element.code = "const answer: number = 42;\nconsole.log(answer);";
     element.breakpoints = [2];
+    element.teachingNotes = {
+      2: {
+        title: "Display the computed answer",
+        explanation: "This output confirms the example produced 42.",
+      },
+    };
     document.body.append(element);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -28,6 +34,9 @@ describe("ts-teaching-debugger", () => {
     const completed = await element.resume();
     expect(completed.status).toBe("paused");
     expect(completed.point?.range.startLine).toBe(2);
+    expect(element.shadowRoot?.querySelector(".teaching-title")?.textContent).toBe(
+      "Display the computed answer",
+    );
 
     const finished = await element.resume();
     expect(finished.status).toBe("complete");
