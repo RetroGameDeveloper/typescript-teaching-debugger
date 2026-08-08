@@ -902,6 +902,11 @@ export const debuggerStyles: string = `
     width: 7px;
   }
 
+  .breakpoint-row[data-kind="once"] .breakpoint-dot {
+    background: transparent;
+    border: 1px solid var(--debug-blue);
+  }
+
   .breakpoint-location {
     color: var(--debug-blue);
   }
