@@ -90,6 +90,22 @@ Properties:
 
 * `code: string`
 * `breakpoints: number[]`
+* `teachingNotes: Record<number, { title: string; explanation: string }>`
+
+Teaching notes override the generic runtime explanation for a source line:
+
+```ts
+teachingDebugger.teachingNotes = {
+  3: {
+    title: "Compare with the target",
+    explanation:
+      "This checks whether the current array element is the value being sought.",
+  },
+};
+```
+
+Editing code inside the component clears line-specific notes so stale guidance is
+not shown against modified source.
 
 Methods:
 
