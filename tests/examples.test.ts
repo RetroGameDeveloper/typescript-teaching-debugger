@@ -35,7 +35,12 @@ describe("algorithm examples", () => {
 
       expect(result.status, result.error?.message).toBe("complete");
       expect(
-        example.breakpoints.every((line) => Boolean(notes[line]?.question)),
+        example.breakpoints.every(
+          (line) =>
+            Boolean(notes[line]?.question) &&
+            notes[line]?.choices?.length === 3 &&
+            notes[line]?.answer !== undefined,
+        ),
       ).toBe(true);
     });
   }
