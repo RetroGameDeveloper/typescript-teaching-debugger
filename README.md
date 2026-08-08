@@ -4,10 +4,10 @@ An embeddable custom element that teaches synchronous TypeScript execution using
 
 ## Features
 
-* Step into, step over, step out, resume, pause, and restart
+* Step into, step over, step out, step back, resume, pause, and restart
 * Executable AST-node and source-line highlighting
 * Focus dimming around the active runtime or guided line
-* Editable TypeScript with clickable gutter breakpoints
+* Editable TypeScript with permanent and one-time gutter breakpoints
 * Live local, block, and module scopes
 * Call-stack frames with source locations
 * Sandboxed console output
@@ -20,7 +20,7 @@ An embeddable custom element that teaches synchronous TypeScript execution using
 * Automatic restart after a completed run
 * Unified lesson walkthrough in the right teaching panel
 * Individually collapsible teaching comments, collapsed by default
-* Runtime and lesson navigation controls in the right sidebar
+* Runtime controls in the right sidebar
 
 ## Included lessons
 
@@ -65,6 +65,7 @@ if (teachingDebugger) {
   `;
 
   teachingDebugger.breakpoints = [3, 7];
+  teachingDebugger.oneTimeBreakpoints = [9];
 }
 ```
 
@@ -99,7 +100,8 @@ ts-teaching-debugger {
 Properties:
 
 * `code: string`
-* `breakpoints: number[]` - includes automatic lesson-step breakpoints
+* `breakpoints: number[]` - all active permanent and one-time breakpoints
+* `oneTimeBreakpoints: number[]` - breakpoints removed after their first pause
 * `autoResetDelay: number` - milliseconds before reset; use `-1` to disable
 
 Place a Markdown JSDoc block immediately above an executable line. The debugger
@@ -174,14 +176,13 @@ value preview; variable and parameter hovers retain it.
 ## Lesson flow
 
 The initial and reset state displays the first `# Problem` block in the right
-teaching panel. Previous and Next navigate all Markdown teaching blocks without
-executing or mutating program state. The selected source line is focused and
-other lines are dimmed.
+teaching panel. The selected source line is focused and other lines are dimmed.
 
-Executable teaching steps are also installed as automatic breakpoints. Resume
-or stepping executes the program, pauses at those lesson lines, and synchronizes
-the same right panel to the reached step. Runtime controls and lesson navigation
-therefore operate together without a separate guided mode or dialog.
+Executable teaching steps are installed as automatic one-time breakpoints.
+Resume advances to the next lesson line, removes its breakpoint, and synchronizes
+the right panel to the reached step. In the gutter, clicking an empty line adds a
+permanent breakpoint, clicking it again converts it to one-time, and clicking a
+third time removes it.
 
 Methods:
 
@@ -191,6 +192,7 @@ Methods:
 * `stepInto()`
 * `stepOver()`
 * `stepOut()`
+* `stepBack()`
 
 Events:
 
