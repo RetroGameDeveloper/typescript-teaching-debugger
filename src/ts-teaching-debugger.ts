@@ -290,7 +290,9 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   static readonly observedAttributes = ["code", "readonly"];
 
   private _breakpoints = new Set<number>();
+  private _autoResetDelay = 1000;
   private _code = "";
+  private completionResetTimer?: ReturnType<typeof setTimeout>;
   private consoleEntries: ConsoleEntry[] = [];
   private editor?: EditorView;
   private engine?: DebuggerEngine;
@@ -308,6 +310,14 @@ export class TsTeachingDebuggerElement extends HTMLElement {
 
   get code(): string {
     return this.editor?.state.doc.toString() ?? this._code;
+  }
+
+  get autoResetDelay(): number {
+    return this._autoResetDelay;
+  }
+
+  set autoResetDelay(delay: number) {
+    this._autoResetDelay = Number.isFinite(delay) ? Math.max(-1, delay) : 1000;
   }
 
   set code(value: string) {
@@ -395,6 +405,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this.editor?.destroy();
     this.editor = undefined;
     clearTimeout(this.resetTimer);
+    clearTimeout(this.completionResetTimer);
   }
 
   attributeChangedCallback(
@@ -408,6 +419,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   }
 
   async reset(): Promise<DebuggerSnapshot> {
+    clearTimeout(this.completionResetTimer);
     const sequence = ++this.resetSequence;
     this.engine?.requestPause();
     this.consoleEntries = [];
@@ -701,6 +713,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
         detail: { breakpoints: lines },
       }),
     );
+
   }
 
   private async runCommand(command: DebugCommand): Promise<DebuggerSnapshot> {
@@ -746,6 +759,15 @@ export class TsTeachingDebuggerElement extends HTMLElement {
         detail: snapshot,
       }),
     );
+
+    if (snapshot.status === "complete" && this._autoResetDelay >= 0) {
+      clearTimeout(this.completionResetTimer);
+      this.completionResetTimer = setTimeout(() => {
+        if (this.snapshot.status === "complete") {
+          void this.reset();
+        }
+      }, this._autoResetDelay);
+    }
   }
 
   private render(): void {
