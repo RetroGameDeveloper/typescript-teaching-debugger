@@ -92,16 +92,13 @@ console.log(answer);`;
     document.body.append(element);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
-    const resetPause = new Promise<void>((resolve) => {
-      element.addEventListener("debugger-paused", () => resolve(), { once: true });
-    });
     const complete = await element.resume();
 
     expect(complete.status).toBe("complete");
-    await resetPause;
+    await new Promise((resolve) => setTimeout(resolve, 10));
     expect(
       element.shadowRoot?.querySelector(".statusbar-state")?.getAttribute("data-status"),
-    ).toBe("paused");
+    ).toBe("ready");
   });
 
   it("dims the selected lesson step and then the runtime pause", async () => {
@@ -124,9 +121,8 @@ console.log(answer);`;
     expect(
       element.shadowRoot?.querySelector(".runtime-sidebar-controls")?.hasAttribute("hidden"),
     ).toBe(false);
-    expect(
-      element.shadowRoot?.querySelector(".guided-sidebar-controls")?.hasAttribute("hidden"),
-    ).toBe(false);
+    expect(element.shadowRoot?.querySelector(".guided-sidebar-controls")).toBeNull();
+    expect(element.shadowRoot?.querySelector(".pause-summary")).toBeNull();
     expect(element.shadowRoot?.querySelector('.sidebar [data-command="into"]')).not.toBeNull();
 
     await element.resume();
@@ -182,6 +178,7 @@ console.log(answer);`;
     document.body.append(element);
     await new Promise((resolve) => setTimeout(resolve, 0));
     await element.stepInto();
+    await element.stepInto();
 
     const internal = element as unknown as {
       createIdentifierHover(identifier: string, position: number): HTMLElement | undefined;
@@ -198,7 +195,7 @@ console.log(answer);`;
     );
   });
 
-  it("navigates the lesson in the right panel in both directions", async () => {
+  it("uses one-time lesson breakpoints with resume as next", async () => {
     const annotated = annotateCode(
       "const first = 1;\nconst second = first + 1;",
       {
@@ -221,40 +218,66 @@ console.log(answer);`;
     document.body.append(element);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
-    const title = element.shadowRoot?.querySelector(".teaching-title");
-    const sidebarNext = element.shadowRoot?.querySelector<HTMLButtonElement>(
-      ".sidebar-guided-next",
-    );
-    const sidebarPrevious = element.shadowRoot?.querySelector<HTMLButtonElement>(
-      ".sidebar-guided-previous",
-    );
+    const lessonLines = parseTeachingComments(annotated.code).map(({ line }) => line);
 
     expect(element.shadowRoot?.querySelector(".cm-guided-dim")).not.toBeNull();
-    expect(
-      element.shadowRoot?.querySelector(".runtime-sidebar-controls")?.hasAttribute("hidden"),
-    ).toBe(false);
-    expect(title?.textContent).toBe("Create the first value");
-    expect(sidebarPrevious?.disabled).toBe(true);
-    expect(element.shadowRoot?.querySelector(".teaching-question")?.hasAttribute("hidden")).toBe(
-      false,
-    );
-    expect(
-      element.shadowRoot?.querySelectorAll(".teaching-question .choice-option"),
-    ).toHaveLength(3);
-    element.shadowRoot
-      ?.querySelector<HTMLButtonElement>(".teaching-question .choice-option")
-      ?.click();
-    element.shadowRoot
-      ?.querySelector<HTMLButtonElement>(".solution-toggle")
-      ?.click();
-    expect(
-      element.shadowRoot?.querySelector(".teaching-solution")?.hasAttribute("hidden"),
-    ).toBe(false);
+    expect(element.oneTimeBreakpoints).toEqual(lessonLines);
+    expect(element.shadowRoot?.querySelector(".sidebar-guided-next")).toBeNull();
 
-    sidebarNext?.click();
-    expect(title?.textContent).toBe("Derive the second value");
-    expect(sidebarNext?.textContent).toBe("Finish");
-    sidebarPrevious?.click();
-    expect(title?.textContent).toBe("Create the first value");
+    const first = await element.resume();
+    expect(first.point?.range.startLine).toBe(lessonLines[0]);
+    expect(element.oneTimeBreakpoints).not.toContain(lessonLines[0]);
+    expect(element.shadowRoot?.querySelector(".teaching-title")?.textContent).toBe(
+      "Create the first value",
+    );
+
+    const second = await element.resume();
+    expect(second.point?.range.startLine).toBe(lessonLines[1]);
+    expect(element.shadowRoot?.querySelector(".teaching-title")?.textContent).toBe(
+      "Derive the second value",
+    );
+  });
+
+  it("cycles gutter breakpoints from regular to one-time to removed", async () => {
+    const element = document.createElement("ts-teaching-debugger") as TsTeachingDebuggerElement;
+    element.code = "const value = 1;";
+    element.breakpoints = [1];
+    document.body.append(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const gutterLine = [...(element.shadowRoot?.querySelectorAll<HTMLElement>(
+      ".cm-breakpoint-gutter .cm-gutterElement",
+    ) ?? [])].find((line) =>
+      line.matches(".cm-breakpoint-marker") || line.querySelector(".cm-breakpoint-marker"),
+    );
+    expect(gutterLine).toBeDefined();
+
+    gutterLine?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    expect(element.breakpoints).toEqual([1]);
+    expect(element.oneTimeBreakpoints).toEqual([1]);
+    expect(element.shadowRoot?.querySelector(".cm-breakpoint-marker-once")).not.toBeNull();
+
+    gutterLine?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    expect(element.breakpoints).toEqual([]);
+    expect(
+      [...(element.shadowRoot?.querySelectorAll<HTMLElement>(".cm-breakpoint-marker") ?? [])]
+        .filter((marker) => marker.style.visibility !== "hidden"),
+    ).toHaveLength(0);
+  });
+
+  it("steps backwards to an earlier executable state", async () => {
+    const element = document.createElement("ts-teaching-debugger") as TsTeachingDebuggerElement;
+    element.code = "const first = 1;\nconst second = first + 1;";
+    document.body.append(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const first = await element.stepInto();
+    const second = await element.stepInto();
+    expect(first.point?.range.startLine).toBe(1);
+    expect(second.point?.range.startLine).toBe(2);
+
+    const previous = await element.stepBack();
+    expect(previous.point?.range.startLine).toBe(1);
+    expect(element.shadowRoot?.querySelector(".cursor-location")?.textContent).toContain("Ln 1");
   });
 });
