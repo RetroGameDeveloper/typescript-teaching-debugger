@@ -7,6 +7,7 @@ import {
   Play,
   Redo2,
   RotateCcw,
+  Undo2,
   createElement as createIconElement,
   type IconNode,
 } from "lucide";
@@ -26,6 +27,7 @@ import {
   setEditorBreakpoints,
   setEditorCode,
   setGuidedLine,
+  type BreakpointKind,
 } from "./editor";
 import { debuggerStyles } from "./styles";
 import {
@@ -87,6 +89,7 @@ const componentTemplate = `
       <aside class="sidebar" aria-label="Debugger details">
         <div class="sidebar-control-panel">
           <div class="runtime-sidebar-controls" role="toolbar" aria-label="Debugger controls">
+            <button class="tool-button" data-command="back" type="button" aria-label="Step back" title="Step back"></button>
             <button class="tool-button" data-command="continue" type="button" aria-label="Resume execution" title="Resume (F8)"></button>
             <button class="tool-button" data-command="over" type="button" aria-label="Step over" title="Step over (F10)"></button>
             <button class="tool-button" data-command="into" type="button" aria-label="Step into" title="Step into (F11)"></button>
@@ -94,12 +97,6 @@ const componentTemplate = `
             <span class="toolbar-separator" aria-hidden="true"></span>
             <button class="tool-button" data-command="restart" type="button" aria-label="Restart" title="Restart (Ctrl+Shift+F5)"></button>
           </div>
-          <div class="guided-sidebar-controls" role="group" aria-label="Lesson navigation">
-            <button class="sidebar-guided-previous" type="button">Previous</button>
-            <span class="sidebar-guided-progress"></span>
-            <button class="sidebar-guided-next" type="button">Next</button>
-          </div>
-          <div class="pause-summary" data-status="ready">Ready to evaluate TypeScript</div>
         </div>
         <div class="teaching-card">
           <p class="teaching-kicker">Why this line exists</p>
@@ -332,6 +329,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   static readonly observedAttributes = ["code", "readonly"];
 
   private _breakpoints = new Set<number>();
+  private _oneTimeBreakpoints = new Set<number>();
   private _autoResetDelay = 1000;
   private _code = "";
   private completionResetTimer?: ReturnType<typeof setTimeout>;
@@ -353,6 +351,9 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   private guidedQuestionSelection?: number;
   private guidedSolutionVisible = false;
   private lessonBreakpoints = new Set<number>();
+  private consumedOneTimeBreakpoints = new Set<number>();
+  private dismissedLessonBreakpoints = new Set<number>();
+  private executionHistory: Array<{ consumed: number[]; operationIndex: number }> = [];
   private followingRuntime = false;
 
   get code(): string {
@@ -372,6 +373,9 @@ export class TsTeachingDebuggerElement extends HTMLElement {
 
     if (this.editor) {
       this.followingRuntime = false;
+      this.dismissedLessonBreakpoints.clear();
+      this.consumedOneTimeBreakpoints.clear();
+      this.executionHistory = [];
       this.guidedIndex = 0;
       this.guidedQuestionSelection = undefined;
       this.guidedSolutionVisible = false;
@@ -391,14 +395,21 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this._breakpoints = new Set(
       [...lines].filter((line) => Number.isInteger(line) && line > 0),
     );
-    const breakpoints = this.allBreakpoints();
-    this.engine?.setBreakpoints(breakpoints);
+    for (const line of this._breakpoints) this._oneTimeBreakpoints.delete(line);
+    this.syncBreakpoints();
+  }
 
-    if (this.editor) {
-      setEditorBreakpoints(this.editor, breakpoints);
-    }
+  get oneTimeBreakpoints(): number[] {
+    return [...this.allOneTimeBreakpoints()].sort((left, right) => left - right);
+  }
 
-    this.renderBreakpoints();
+  set oneTimeBreakpoints(lines: Iterable<number>) {
+    this._oneTimeBreakpoints = new Set(
+      [...lines].filter((line) => Number.isInteger(line) && line > 0),
+    );
+    for (const line of this._oneTimeBreakpoints) this._breakpoints.delete(line);
+    this.consumedOneTimeBreakpoints.clear();
+    this.syncBreakpoints();
   }
 
   connectedCallback(): void {
@@ -418,13 +429,13 @@ export class TsTeachingDebuggerElement extends HTMLElement {
       code: this._code,
       createHover: (identifier, position) =>
         this.createIdentifierHover(identifier, position),
-      onBreakpointsChange: (lines) => this.handleBreakpointChange(lines),
+      onBreakpointsChange: (line, kind) => this.handleBreakpointChange(line, kind),
       onChange: (source) => this.handleSourceChange(source),
       parent: this.requiredElement(".editor-host"),
       readOnly: this.hasAttribute("readonly"),
     });
     this.refreshTeachingComments();
-    setEditorBreakpoints(this.editor, this.allBreakpoints());
+    this.syncBreakpoints();
     this.bindEvents();
     void this.reset();
   }
@@ -452,6 +463,8 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     const sequence = ++this.resetSequence;
     this.engine?.requestPause();
     this.consoleEntries = [];
+    this.consumedOneTimeBreakpoints.clear();
+    this.executionHistory = [];
     this.followingRuntime = false;
     this.guidedIndex = 0;
     this.guidedQuestionSelection = undefined;
@@ -473,14 +486,10 @@ export class TsTeachingDebuggerElement extends HTMLElement {
         },
       });
       this.engine = engine;
-      const result = await engine.advance("into");
-
-      if (sequence !== this.resetSequence || this.engine !== engine) {
-        return this.snapshot;
-      }
-
-      this.acceptSnapshot(result);
-      return result;
+      if (sequence !== this.resetSequence || this.engine !== engine) return this.snapshot;
+      this.syncBreakpoints();
+      this.render();
+      return this.snapshot;
     } catch (error) {
       const normalized = error instanceof Error ? error : new Error(String(error));
       const result: DebuggerSnapshot = { error: normalized, status: "error" };
@@ -509,6 +518,30 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this.engine?.requestPause();
   }
 
+  async stepBack(): Promise<DebuggerSnapshot> {
+    if (this.executionHistory.length === 0) return this.reset();
+    if (this.snapshot.status === "paused") this.executionHistory.pop();
+    if (this.executionHistory.length === 0) return this.reset();
+    const checkpoint = this.executionHistory.at(-1)!;
+    this.consoleEntries = [];
+    this.consumedOneTimeBreakpoints = new Set(checkpoint.consumed);
+    const engine = new DebuggerEngine(this.code, {
+      onConsole: (entry) => {
+        this.consoleEntries.push(entry);
+      },
+    });
+    this.engine = engine;
+    let result: DebuggerSnapshot = { status: "ready" };
+    while (engine.operationIndex < checkpoint.operationIndex) {
+      result = await engine.advance("into");
+      if (result.status !== "paused") break;
+    }
+    engine.setBreakpoints(this.allBreakpoints());
+    this.followingRuntime = true;
+    this.acceptSnapshot(result);
+    return result;
+  }
+
   private requiredElement<T extends Element>(selector: string): T {
     const element = this.shadowRoot?.querySelector<T>(selector);
 
@@ -519,6 +552,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   private addIcons(): void {
     const icons: Record<string, IconNode> = {
       continue: Play,
+      back: Undo2,
       into: ArrowDownToLine,
       out: ArrowUpFromLine,
       over: Redo2,
@@ -549,6 +583,8 @@ export class TsTeachingDebuggerElement extends HTMLElement {
 
           if (command === "restart") {
             void this.reset();
+          } else if (command === "back") {
+            void this.stepBack();
           } else if (command) {
             void this.runCommand(command as DebugCommand);
           }
@@ -565,18 +601,6 @@ export class TsTeachingDebuggerElement extends HTMLElement {
         this.renderGuidedDialog();
         this.renderTeachingCard();
       },
-      { signal },
-    );
-
-    this.requiredElement<HTMLButtonElement>(".sidebar-guided-previous").addEventListener(
-      "click",
-      () => this.moveGuidedStep(-1),
-      { signal },
-    );
-
-    this.requiredElement<HTMLButtonElement>(".sidebar-guided-next").addEventListener(
-      "click",
-      () => this.moveGuidedStep(1),
       { signal },
     );
 
@@ -610,12 +634,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
 
         if (!target) return;
         const line = Number(target.dataset.removeBreakpoint);
-        this.breakpoints = this.breakpoints.filter((candidate) => candidate !== line);
-        this.dispatchEvent(
-          new CustomEvent("breakpoints-change", {
-            detail: { breakpoints: this.breakpoints },
-          }),
-        );
+        this.removeBreakpoint(line);
       },
       { signal },
     );
@@ -671,9 +690,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
         })
         .map((comment) => comment.line),
     );
-    const breakpoints = this.allBreakpoints();
-    this.engine?.setBreakpoints(breakpoints);
-    if (this.editor) setEditorBreakpoints(this.editor, breakpoints);
+    this.syncBreakpoints();
     this.applyCommentVisibility();
     if (this.shadowRoot) {
       this.renderGuidedDialog();
@@ -689,35 +706,17 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     );
   }
 
-  private moveGuidedStep(direction: -1 | 1): void {
-    const next = this.guidedIndex + direction;
-
-    if (next >= this.guidedComments.length) {
-      this.guidedIndex = Math.max(0, this.guidedComments.length - 1);
-      return;
-    }
-
-    this.followingRuntime = false;
-    this.guidedIndex = Math.max(0, next);
-    this.guidedQuestionSelection = undefined;
-    this.guidedSolutionVisible = false;
-    this.renderGuidedDialog();
-    this.renderTeachingCard();
-  }
-
   private renderGuidedDialog(): void {
     if (!this.editor) return;
     const comment = this.guidedComments[this.guidedIndex];
 
     if (this.followingRuntime || !comment) {
       setGuidedLine(this.editor);
-      this.renderViewToggles();
       return;
     }
 
     setActivePoint(this.editor);
     setGuidedLine(this.editor, this.guidedAnchorLine(comment));
-    this.renderViewToggles();
   }
 
   private guidedAnchorLine(comment: TeachingComment): number {
@@ -818,7 +817,26 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   }
 
   private allBreakpoints(): Set<number> {
-    return new Set([...this._breakpoints, ...this.lessonBreakpoints]);
+    return new Set([...this._breakpoints, ...this.allOneTimeBreakpoints()]);
+  }
+
+  private allOneTimeBreakpoints(): Set<number> {
+    return new Set(
+      [...this._oneTimeBreakpoints, ...this.lessonBreakpoints].filter(
+        (line) =>
+          !this._breakpoints.has(line) &&
+          !this.dismissedLessonBreakpoints.has(line) &&
+          !this.consumedOneTimeBreakpoints.has(line),
+      ),
+    );
+  }
+
+  private syncBreakpoints(): void {
+    const breakpoints = this.allBreakpoints();
+    const oneTime = this.allOneTimeBreakpoints();
+    this.engine?.setBreakpoints(breakpoints);
+    if (this.editor) setEditorBreakpoints(this.editor, breakpoints, oneTime);
+    if (this.shadowRoot) this.renderBreakpoints();
   }
 
   private scheduleReset(delay: number): void {
@@ -826,20 +844,36 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this.resetTimer = setTimeout(() => void this.reset(), delay);
   }
 
-  private handleBreakpointChange(lines: number[]): void {
-    this._breakpoints = new Set(
-      lines.filter((line) => !this.lessonBreakpoints.has(line)),
-    );
-    const breakpoints = this.allBreakpoints();
-    this.engine?.setBreakpoints(breakpoints);
-    if (this.editor) setEditorBreakpoints(this.editor, breakpoints);
-    this.renderBreakpoints();
+  private handleBreakpointChange(
+    line: number,
+    kind: BreakpointKind | undefined,
+  ): void {
+    this._breakpoints.delete(line);
+    this._oneTimeBreakpoints.delete(line);
+    this.consumedOneTimeBreakpoints.delete(line);
+    if (this.lessonBreakpoints.has(line)) this.dismissedLessonBreakpoints.add(line);
+    if (kind === "regular") this._breakpoints.add(line);
+    if (kind === "once") this._oneTimeBreakpoints.add(line);
+    this.syncBreakpoints();
     this.dispatchEvent(
       new CustomEvent("breakpoints-change", {
-        detail: { breakpoints: [...breakpoints].sort((left, right) => left - right) },
+        detail: {
+          breakpoints: this.breakpoints,
+          oneTimeBreakpoints: this.oneTimeBreakpoints,
+        },
       }),
     );
+  }
 
+  private removeBreakpoint(line: number): void {
+    this._breakpoints.delete(line);
+    this._oneTimeBreakpoints.delete(line);
+    this.consumedOneTimeBreakpoints.delete(line);
+    if (this.lessonBreakpoints.has(line)) this.dismissedLessonBreakpoints.add(line);
+    this.syncBreakpoints();
+    this.dispatchEvent(new CustomEvent("breakpoints-change", {
+      detail: { breakpoints: this.breakpoints, oneTimeBreakpoints: this.oneTimeBreakpoints },
+    }));
   }
 
   private async runCommand(command: DebugCommand): Promise<DebuggerSnapshot> {
@@ -865,6 +899,17 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     const result = await engine.advance(command);
 
     if (this.engine === engine) {
+      if (result.status === "paused" && result.point) {
+        const line = result.point.range.startLine;
+        if (this.allOneTimeBreakpoints().has(line)) {
+          this.consumedOneTimeBreakpoints.add(line);
+          this.syncBreakpoints();
+        }
+        this.executionHistory.push({
+          consumed: [...this.consumedOneTimeBreakpoints],
+          operationIndex: engine.operationIndex,
+        });
+      }
       this.acceptSnapshot(result);
     }
 
@@ -921,19 +966,6 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this.renderBreakpoints();
     this.renderConsole();
     this.renderStatusbar();
-    this.renderViewToggles();
-  }
-
-  private renderViewToggles(): void {
-    if (!this.shadowRoot) return;
-    this.requiredElement<HTMLElement>(".sidebar-guided-progress").textContent =
-      `${Math.min(this.guidedIndex + 1, this.guidedComments.length)} / ${this.guidedComments.length}`;
-    this.requiredElement<HTMLButtonElement>(".sidebar-guided-previous").disabled =
-      this.guidedIndex === 0;
-    const next = this.requiredElement<HTMLButtonElement>(".sidebar-guided-next");
-    next.disabled = this.guidedComments.length === 0;
-    next.textContent =
-      this.guidedIndex === this.guidedComments.length - 1 ? "Finish" : "Next";
   }
 
   private renderToolbar(): void {
@@ -957,22 +989,8 @@ export class TsTeachingDebuggerElement extends HTMLElement {
       .forEach((button) => {
         button.disabled = running || terminal || !this.engine;
       });
-
-    const summary = this.requiredElement<HTMLElement>(".pause-summary");
-    summary.dataset.status = this.snapshot.status;
-    summary.textContent = this.summaryText();
-  }
-
-  private summaryText(): string {
-    if (this.snapshot.status === "running") return "Running...";
-    if (this.snapshot.status === "complete") return "Execution finished";
-    if (this.snapshot.status === "error") {
-      return this.snapshot.error?.message ?? "Execution failed";
-    }
-    if (this.snapshot.point) {
-      return `Paused at ${this.snapshot.point.range.startLine}:${this.snapshot.point.range.startColumn + 1} - ${this.snapshot.point.label}`;
-    }
-    return "Ready to evaluate TypeScript";
+    this.requiredElement<HTMLButtonElement>('[data-command="back"]').disabled =
+      running || this.executionHistory.length === 0;
   }
 
   private renderTeachingCard(): void {
@@ -1275,10 +1293,12 @@ export class TsTeachingDebuggerElement extends HTMLElement {
       for (const line of lines) {
         const row = document.createElement("div");
         row.className = "breakpoint-row";
+        const oneTime = this.allOneTimeBreakpoints().has(line);
+        row.dataset.kind = oneTime ? "once" : "regular";
         const dot = document.createElement("span");
         dot.className = "breakpoint-dot";
         const label = document.createElement("span");
-        label.textContent = "lesson.ts";
+        label.textContent = oneTime ? "lesson.ts (once)" : "lesson.ts";
         const location = document.createElement("span");
         location.className = "breakpoint-location";
         location.textContent = `:${line}`;
