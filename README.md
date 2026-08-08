@@ -17,6 +17,7 @@ An embeddable custom element that teaches synchronous TypeScript execution using
 * Curriculum groups ordered from fundamentals through compiler algorithms
 * Live variable-value and Markdown documentation hovers
 * Automatic restart after a completed run
+* Optional guided walkthrough with anchored Markdown dialogs
 
 ## Included lessons
 
@@ -97,6 +98,8 @@ Properties:
 * `code: string`
 * `breakpoints: number[]`
 * `autoResetDelay: number` - milliseconds before reset; use `-1` to disable
+* `guidedMode: boolean`
+* `guidedSteps: number[]`
 * `showComments: boolean`
 * `showQuestions: boolean`
 
@@ -133,6 +136,22 @@ Hovering an identifier reads its value from the nearest active scope. If its
 declaration has a Markdown JSDoc teaching block, the same documentation is shown
 in the hover card even while comments are hidden. Function declaration blocks
 act as rendered function docstrings.
+
+## Guided walkthrough
+
+Enable `guidedMode` or use the Guided toolbar toggle to open a large walkthrough
+dialog anchored above or below the selected code. Previous and Next navigate the
+ordered teaching blocks without executing or mutating program state. The dialog
+includes Markdown documentation, optional questions, answer input, and solution
+reveal. Finish closes the walkthrough.
+
+By default, steps follow executable Markdown teaching blocks in source order.
+Set `guidedSteps` to source line numbers when a lesson needs a custom route:
+
+```ts
+teachingDebugger.guidedSteps = [12, 24, 37];
+teachingDebugger.guidedMode = true;
+```
 
 Methods:
 
