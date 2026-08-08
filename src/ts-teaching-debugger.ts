@@ -88,7 +88,6 @@ const componentTemplate = `
       <span class="toolbar-separator" aria-hidden="true"></span>
       <button class="tool-button" data-command="restart" type="button" aria-label="Restart" title="Restart (Ctrl+Shift+F5)"></button>
       <span class="toolbar-separator" aria-hidden="true"></span>
-      <button class="view-toggle" data-view="comments" type="button" aria-pressed="false">Comments</button>
       <button class="view-toggle" data-view="guided" type="button" aria-pressed="true">Guided</button>
       <div class="pause-summary" data-status="ready">Ready to evaluate TypeScript</div>
     </div>
@@ -108,8 +107,8 @@ const componentTemplate = `
               <div class="guided-question" hidden>
                 <p class="question-label">Question</p>
                 <div class="guided-question-prompt"></div>
-                <textarea class="guided-response" rows="3" aria-label="Your guided answer" placeholder="Write your answer before revealing the solution"></textarea>
-                <button class="guided-solution-toggle" type="button">Reveal solution</button>
+                <div class="guided-question-choices" role="radiogroup" aria-label="Choose an answer"></div>
+                <button class="guided-solution-toggle" type="button">Check answer</button>
                 <div class="guided-solution" hidden>
                   <p class="solution-label">Solution</p>
                   <div class="guided-solution-copy"></div>
@@ -132,8 +131,8 @@ const componentTemplate = `
           <div class="teaching-question" hidden>
             <p class="question-label">Question</p>
             <div class="question-prompt"></div>
-            <textarea class="question-response" rows="2" aria-label="Your answer" placeholder="Write your answer before revealing the solution"></textarea>
-            <button class="solution-toggle" type="button">Reveal solution</button>
+            <div class="question-choices" role="radiogroup" aria-label="Choose an answer"></div>
+            <button class="solution-toggle" type="button">Check answer</button>
             <div class="teaching-solution" hidden>
               <p class="solution-label">Solution</p>
               <div class="solution-copy"></div>
@@ -240,6 +239,32 @@ function renderMarkdown(target: HTMLElement, markdown: string): void {
   }
 }
 
+interface MultipleChoiceAssessment {
+  answer: number;
+  choices: string[];
+}
+
+function multipleChoiceAssessment(note: TeachingNote): MultipleChoiceAssessment {
+  if (
+    note.choices &&
+    note.choices.length >= 2 &&
+    note.answer !== undefined &&
+    note.answer >= 0 &&
+    note.answer < note.choices.length
+  ) {
+    return { answer: note.answer, choices: note.choices };
+  }
+
+  return {
+    answer: 0,
+    choices: [
+      note.solution ?? note.explanation,
+      "This restarts the algorithm and clears its current progress.",
+      "This skips the remaining work and immediately ends the program.",
+    ],
+  };
+}
+
 function formatStatus(status: DebuggerSnapshot["status"]): string {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
@@ -342,13 +367,14 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   private snapshot: DebuggerSnapshot = { status: "ready" };
   private suppressEditorChange = false;
   private _teachingNotes: TeachingNotes = {};
-  private commentsVisible = false;
+  private questionSelection?: number;
   private solutionVisible = false;
   private teachingLine?: number;
   private teachingSymbols: TeachingSymbol[] = [];
   private guidedComments: TeachingComment[] = [];
   private guidedEnabled = true;
   private guidedIndex = 0;
+  private guidedQuestionSelection?: number;
   private guidedSolutionVisible = false;
   private _guidedSteps: number[] = [];
 
@@ -369,6 +395,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
 
     if (this.editor) {
       this.guidedIndex = 0;
+      this.guidedQuestionSelection = undefined;
       this.guidedSolutionVisible = false;
       this.suppressEditorChange = true;
       setEditorCode(this.editor, this._code);
@@ -395,16 +422,6 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this.renderBreakpoints();
   }
 
-  get showComments(): boolean {
-    return this.commentsVisible;
-  }
-
-  set showComments(visible: boolean) {
-    this.commentsVisible = Boolean(visible);
-    this.applyCommentVisibility();
-    this.renderViewToggles();
-  }
-
   get guidedMode(): boolean {
     return this.guidedEnabled;
   }
@@ -412,6 +429,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   set guidedMode(enabled: boolean) {
     this.guidedEnabled = Boolean(enabled);
     this.guidedIndex = 0;
+    this.guidedQuestionSelection = undefined;
     this.guidedSolutionVisible = false;
     if (this.shadowRoot) {
       this.renderGuidedDialog();
@@ -590,9 +608,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
       button.addEventListener(
         "click",
         () => {
-          if (button.dataset.view === "comments") {
-            this.showComments = !this.showComments;
-          } else if (button.dataset.view === "guided") {
+          if (button.dataset.view === "guided") {
             this.guidedMode = !this.guidedMode;
           }
         },
@@ -603,6 +619,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this.requiredElement<HTMLButtonElement>(".solution-toggle").addEventListener(
       "click",
       () => {
+        if (this.questionSelection === undefined) return;
         this.solutionVisible = !this.solutionVisible;
         this.renderTeachingCard();
       },
@@ -632,6 +649,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this.requiredElement<HTMLButtonElement>(".guided-solution-toggle").addEventListener(
       "click",
       () => {
+        if (this.guidedQuestionSelection === undefined) return;
         this.guidedSolutionVisible = !this.guidedSolutionVisible;
         this.renderGuidedDialog();
       },
@@ -753,8 +771,8 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     }
 
     this.guidedIndex = Math.max(0, next);
+    this.guidedQuestionSelection = undefined;
     this.guidedSolutionVisible = false;
-    this.requiredElement<HTMLTextAreaElement>(".guided-response").value = "";
     this.renderGuidedDialog();
   }
 
@@ -788,6 +806,17 @@ export class TsTeachingDebuggerElement extends HTMLElement {
         this.requiredElement<HTMLElement>(".guided-question-prompt"),
         comment.question,
       );
+      this.renderChoiceOptions(
+        this.requiredElement<HTMLElement>(".guided-question-choices"),
+        comment,
+        this.guidedQuestionSelection,
+        this.guidedSolutionVisible,
+        (selection) => {
+          this.guidedQuestionSelection = selection;
+          this.guidedSolutionVisible = false;
+          this.renderGuidedDialog();
+        },
+      );
     }
 
     const solution = this.requiredElement<HTMLElement>(".guided-solution");
@@ -795,11 +824,17 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     const solutionToggle = this.requiredElement<HTMLButtonElement>(
       ".guided-solution-toggle",
     );
+    solutionToggle.disabled = this.guidedQuestionSelection === undefined;
     solutionToggle.textContent = this.guidedSolutionVisible
-      ? "Hide solution"
-      : "Reveal solution";
+      ? "Hide explanation"
+      : "Check answer";
 
     if (this.guidedSolutionVisible) {
+      const assessment = multipleChoiceAssessment(comment);
+      solution.dataset.result =
+        this.guidedQuestionSelection === assessment.answer ? "correct" : "incorrect";
+      this.requiredElement<HTMLElement>(".guided-solution .solution-label").textContent =
+        this.guidedQuestionSelection === assessment.answer ? "Correct" : "Not quite";
       renderMarkdown(
         this.requiredElement<HTMLElement>(".guided-solution-copy"),
         comment.solution ?? comment.explanation,
@@ -923,7 +958,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
       from,
       to,
     }));
-    setCommentVisibility(this.editor, ranges, this.commentsVisible);
+    setCommentVisibility(this.editor, ranges, false);
   }
 
   private scheduleReset(delay: number): void {
@@ -1011,9 +1046,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
 
   private renderViewToggles(): void {
     if (!this.shadowRoot) return;
-    const comments = this.requiredElement<HTMLButtonElement>('[data-view="comments"]');
     const guided = this.requiredElement<HTMLButtonElement>('[data-view="guided"]');
-    comments.setAttribute("aria-pressed", String(this.commentsVisible));
     guided.setAttribute("aria-pressed", String(this.guidedEnabled));
   }
 
@@ -1109,23 +1142,74 @@ export class TsTeachingDebuggerElement extends HTMLElement {
 
     if (this.teachingLine !== line) {
       this.teachingLine = line;
+      this.questionSelection = undefined;
       this.solutionVisible = false;
-      this.requiredElement<HTMLTextAreaElement>(".question-response").value = "";
     }
 
     container.hidden = false;
     renderMarkdown(this.requiredElement<HTMLElement>(".question-prompt"), note.question);
+    this.renderChoiceOptions(
+      this.requiredElement<HTMLElement>(".question-choices"),
+      note,
+      this.questionSelection,
+      this.solutionVisible,
+      (selection) => {
+        this.questionSelection = selection;
+        this.solutionVisible = false;
+        this.renderQuestion(note, line);
+      },
+    );
     const solution = this.requiredElement<HTMLElement>(".teaching-solution");
     const toggle = this.requiredElement<HTMLButtonElement>(".solution-toggle");
     solution.hidden = !this.solutionVisible;
-    toggle.textContent = this.solutionVisible ? "Hide solution" : "Reveal solution";
+    toggle.disabled = this.questionSelection === undefined;
+    toggle.textContent = this.solutionVisible ? "Hide explanation" : "Check answer";
 
     if (this.solutionVisible) {
+      const assessment = multipleChoiceAssessment(note);
+      solution.dataset.result =
+        this.questionSelection === assessment.answer ? "correct" : "incorrect";
+      this.requiredElement<HTMLElement>(".teaching-solution .solution-label").textContent =
+        this.questionSelection === assessment.answer ? "Correct" : "Not quite";
       renderMarkdown(
         this.requiredElement<HTMLElement>(".solution-copy"),
         note.solution ?? note.explanation,
       );
     }
+  }
+
+  private renderChoiceOptions(
+    container: HTMLElement,
+    note: TeachingNote,
+    selection: number | undefined,
+    revealed: boolean,
+    onSelect: (selection: number) => void,
+  ): void {
+    const assessment = multipleChoiceAssessment(note);
+    container.replaceChildren();
+
+    assessment.choices.forEach((choice, index) => {
+      const button = document.createElement("button");
+      button.className = "choice-option";
+      button.type = "button";
+      button.setAttribute("role", "radio");
+      button.setAttribute("aria-checked", String(selection === index));
+      button.dataset.selected = String(selection === index);
+      button.disabled = revealed;
+
+      if (revealed && index === assessment.answer) button.dataset.result = "correct";
+      else if (revealed && index === selection) button.dataset.result = "incorrect";
+
+      const marker = document.createElement("span");
+      marker.className = "choice-marker";
+      marker.textContent = String.fromCharCode(65 + index);
+      const copy = document.createElement("div");
+      copy.className = "choice-copy";
+      renderMarkdown(copy, choice);
+      button.append(marker, copy);
+      button.addEventListener("click", () => onSelect(index));
+      container.append(button);
+    });
   }
 
   private renderScope(): void {
