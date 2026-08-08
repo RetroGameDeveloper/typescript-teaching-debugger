@@ -14,6 +14,8 @@ An embeddable custom element that teaches synchronous TypeScript execution using
 * Shadow DOM style isolation
 * Keyboard controls matching common browser debuggers
 * Searchable teaching library with 17 classic algorithms
+* Curriculum groups ordered from fundamentals through compiler algorithms
+* Live variable-value and Markdown documentation hovers
 
 ## Included lessons
 
@@ -121,6 +123,11 @@ metadata.
 The toolbar toggles comment blocks and questions independently. Hiding comments
 only changes their editor presentation; their content remains available to the
 teaching panel. The properties above can set the initial or current toggle state.
+
+Hovering an identifier reads its value from the nearest active scope. If its
+declaration has a Markdown JSDoc teaching block, the same documentation is shown
+in the hover card even while comments are hidden. Function declaration blocks
+act as rendered function docstrings.
 
 Methods:
 
