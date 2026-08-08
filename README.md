@@ -17,7 +17,7 @@ An embeddable custom element that teaches synchronous TypeScript execution using
 * Curriculum groups ordered from fundamentals through compiler algorithms
 * Live variable-value and Markdown documentation hovers
 * Automatic restart after a completed run
-* Optional guided walkthrough with anchored Markdown dialogs
+* Guided walkthrough by default, with anchored Markdown dialogs
 
 ## Included lessons
 
@@ -98,10 +98,9 @@ Properties:
 * `code: string`
 * `breakpoints: number[]`
 * `autoResetDelay: number` - milliseconds before reset; use `-1` to disable
-* `guidedMode: boolean`
+* `guidedMode: boolean` - enabled by default
 * `guidedSteps: number[]`
 * `showComments: boolean`
-* `showQuestions: boolean`
 
 Place a Markdown JSDoc block immediately above an executable line. The debugger
 uses it for the "Why this line exists" panel:
@@ -111,6 +110,10 @@ uses it for the "Why this line exists" panel:
  * ## Compare with the target
  *
  * This checks whether the current array element is the value being sought.
+ *
+ * ### Arguments
+ * * `values` - The array being searched.
+ * * `target` - The value to locate.
  *
  * ### Question
  * What happens when `values[index]` equals `target`?
@@ -124,13 +127,17 @@ if (values[index] === target) {
 ```
 
 `##` supplies the teaching title. Markdown below it supplies the explanation.
-The `### Question` and `### Solution` sections are optional. Content is parsed
+Function teaching blocks act as docstrings. An optional `### Arguments` section
+documents parameters and supplies the Markdown shown when a learner hovers over
+each argument. The `### Question` and `### Solution` sections are optional. Content is parsed
 from the current editor source after edits, rather than held in separate lesson
 metadata.
 
-The toolbar toggles comment blocks and questions independently. Hiding comments
-only changes their editor presentation; their content remains available to the
-teaching panel. The properties above can set the initial or current toggle state.
+The Comments toolbar control only changes the blocks' editor presentation. When
+shown, headings, bold text, and inline code receive readable Markdown styling in
+the code editor. Their content remains available to the teaching panel and
+hovers when hidden. Questions are always enabled whenever a teaching block
+defines one.
 
 Hovering an identifier reads its value from the nearest active scope. If its
 declaration has a Markdown JSDoc teaching block, the same documentation is shown
@@ -139,8 +146,9 @@ act as rendered function docstrings.
 
 ## Guided walkthrough
 
-Enable `guidedMode` or use the Guided toolbar toggle to open a large walkthrough
-dialog anchored above or below the selected code. Previous and Next navigate the
+Guided mode starts enabled. Set `guidedMode` to `false`, or use the Guided toolbar
+toggle, to close it. The large walkthrough dialog is anchored above or below the
+selected code. Previous and Next navigate the
 ordered teaching blocks without executing or mutating program state. The dialog
 includes Markdown documentation, optional questions, answer input, and solution
 reveal. Finish closes the walkthrough.
