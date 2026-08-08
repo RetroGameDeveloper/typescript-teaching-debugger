@@ -729,17 +729,6 @@ export const debuggerStyles: string = `
     padding: 1px 3px;
   }
 
-  .ast-token {
-    background: rgba(138, 180, 248, 0.13);
-    border: 1px solid rgba(138, 180, 248, 0.25);
-    border-radius: 3px;
-    color: var(--debug-blue);
-    display: inline-block;
-    font: 10px/1 var(--debug-mono);
-    margin-top: 9px;
-    padding: 4px 6px;
-  }
-
   .panel-section {
     border-bottom: 1px solid var(--debug-border);
   }
@@ -1014,10 +1003,6 @@ export const debuggerStyles: string = `
 
     .teaching-card {
       padding: 10px 12px;
-    }
-
-    .ast-token {
-      margin-top: 5px;
     }
 
   }
