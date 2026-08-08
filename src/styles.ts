@@ -40,14 +40,13 @@ export const debuggerStyles: string = `
     color: var(--debug-text);
     display: grid;
     font: 12px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
-    grid-template-rows: 34px 38px minmax(0, 1fr) 25px;
+    grid-template-rows: 34px minmax(0, 1fr) 25px;
     height: 100%;
     min-height: 470px;
     overflow: hidden;
   }
 
   .tab-strip,
-  .toolbar,
   .statusbar {
     align-items: center;
     display: flex;
@@ -94,13 +93,6 @@ export const debuggerStyles: string = `
     box-shadow: 0 0 0 3px rgba(138, 180, 248, 0.12);
     height: 6px;
     width: 6px;
-  }
-
-  .toolbar {
-    background: #252629;
-    border-bottom: 1px solid var(--debug-border);
-    gap: 2px;
-    padding: 0 7px;
   }
 
   .tool-button,
@@ -180,10 +172,7 @@ export const debuggerStyles: string = `
   .pause-summary {
     color: var(--debug-muted);
     font: 10px/1.3 var(--debug-mono);
-    margin-left: auto;
-    max-width: min(46vw, 520px);
     overflow: hidden;
-    padding-left: 12px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -333,9 +322,7 @@ export const debuggerStyles: string = `
   }
 
   .guided-question {
-    border-top: 1px solid rgba(197, 138, 249, 0.22);
-    margin-top: 13px;
-    padding-top: 12px;
+    margin-top: 10px;
   }
 
   .guided-solution-toggle {
@@ -414,6 +401,79 @@ export const debuggerStyles: string = `
     border-left: 1px solid var(--debug-border);
     min-height: 0;
     overflow: auto;
+  }
+
+  .sidebar-control-panel {
+    background: #202124;
+    border-bottom: 1px solid var(--debug-border);
+    padding: 6px 8px 7px;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+
+  .runtime-sidebar-controls,
+  .guided-sidebar-controls {
+    align-items: center;
+    display: flex;
+    gap: 2px;
+    min-height: 28px;
+  }
+
+  .runtime-sidebar-controls .view-toggle {
+    margin-left: auto;
+  }
+
+  .guided-sidebar-controls {
+    gap: 6px;
+  }
+
+  .guided-sidebar-controls[hidden],
+  .runtime-sidebar-controls[hidden] {
+    display: none;
+  }
+
+  .sidebar-guided-previous,
+  .sidebar-guided-next,
+  .sidebar-guided-exit {
+    background: transparent;
+    border: 1px solid var(--debug-border);
+    border-radius: 4px;
+    color: var(--debug-text);
+    cursor: pointer;
+    font: 9px/1 var(--debug-mono);
+    padding: 7px 8px;
+  }
+
+  .sidebar-guided-next {
+    background: var(--debug-blue);
+    border-color: var(--debug-blue);
+    color: #202124;
+    font-weight: 700;
+  }
+
+  .sidebar-guided-exit {
+    color: var(--debug-muted);
+    margin-left: auto;
+  }
+
+  .sidebar-guided-previous:disabled,
+  .sidebar-guided-next:disabled {
+    cursor: default;
+    opacity: 0.38;
+  }
+
+  .sidebar-guided-progress {
+    color: var(--debug-muted);
+    font: 9px/1 var(--debug-mono);
+    min-width: 34px;
+    text-align: center;
+  }
+
+  .sidebar-control-panel .pause-summary {
+    border-top: 1px solid var(--debug-border-soft);
+    margin-top: 5px;
+    padding-top: 5px;
   }
 
   .teaching-card {
@@ -939,7 +999,7 @@ export const debuggerStyles: string = `
 
   @media (max-width: 820px) {
     .shell {
-      grid-template-rows: 34px 38px minmax(0, 1fr) 25px;
+      grid-template-rows: 34px minmax(0, 1fr) 25px;
     }
 
     .workspace {
@@ -960,20 +1020,12 @@ export const debuggerStyles: string = `
       margin-top: 5px;
     }
 
-    .pause-summary {
-      max-width: 44vw;
-    }
   }
 
   @media (max-width: 520px) {
     .mode-badge,
     .pause-summary {
       display: none;
-    }
-
-    .toolbar {
-      justify-content: flex-start;
-      overflow-x: auto;
     }
 
     .workspace {
