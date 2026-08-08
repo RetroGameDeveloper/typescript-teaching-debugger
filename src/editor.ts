@@ -25,6 +25,7 @@ import {
   lineNumbers,
   rectangularSelection,
   type DecorationSet,
+  WidgetType,
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import type { ExecutionPoint } from "./core/types";
@@ -74,12 +75,29 @@ const guidedRangeEffect = StateEffect.define<ActiveRange | null>({
       : null,
 });
 
-const hiddenCommentsEffect = StateEffect.define<EditorRange[]>({
-  map: (ranges, mapping) =>
-    ranges.map((range) => ({
+interface CommentDisplayChange {
+  expandAll: boolean;
+  ranges: EditorRange[];
+}
+
+interface CommentDisplayState {
+  decorations: DecorationSet;
+  expanded: ReadonlySet<number>;
+  ranges: EditorRange[];
+}
+
+const commentDisplayEffect = StateEffect.define<CommentDisplayChange>({
+  map: (value, mapping) => ({
+    ...value,
+    ranges: value.ranges.map((range) => ({
       from: mapping.mapPos(range.from),
       to: mapping.mapPos(range.to),
     })),
+  }),
+});
+
+const toggleCommentEffect = StateEffect.define<number>({
+  map: (position, mapping) => mapping.mapPos(position),
 });
 
 const markdownCommentsEffect = StateEffect.define<EditorRange[]>({
@@ -194,25 +212,117 @@ const activeRangeState = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 
-const hiddenCommentsState = StateField.define<DecorationSet>({
-  create: () => Decoration.none,
-  update: (decorations, transaction) => {
-    let next = decorations.map(transaction.changes);
+class CommentToggleWidget extends WidgetType {
+  constructor(
+    private readonly expanded: boolean,
+    private readonly indentation: number,
+    private readonly position: number,
+    private readonly title: string,
+  ) {
+    super();
+  }
+
+  eq(other: CommentToggleWidget): boolean {
+    return (
+      other.expanded === this.expanded &&
+      other.indentation === this.indentation &&
+      other.position === this.position &&
+      other.title === this.title
+    );
+  }
+
+  toDOM(view: EditorView): HTMLElement {
+    const wrapper = document.createElement("div");
+    wrapper.className = "cm-comment-toggle-row";
+    wrapper.style.paddingLeft = `${this.indentation}ch`;
+    const button = document.createElement("button");
+    button.className = "cm-comment-toggle";
+    button.type = "button";
+    button.dataset.expanded = String(this.expanded);
+    button.setAttribute("aria-expanded", String(this.expanded));
+    button.setAttribute(
+      "aria-label",
+      `${this.expanded ? "Collapse" : "Expand"} ${this.title} comment`,
+    );
+    const chevron = document.createElement("span");
+    chevron.className = "cm-comment-toggle-chevron";
+    chevron.textContent = this.expanded ? "v" : ">";
+    const label = document.createElement("span");
+    label.textContent = this.title;
+    button.append(chevron, label);
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      view.dispatch({ effects: toggleCommentEffect.of(this.position) });
+    });
+    wrapper.append(button);
+    return wrapper;
+  }
+}
+
+function commentDisplayDecorations(
+  state: EditorState,
+  ranges: EditorRange[],
+  expanded: ReadonlySet<number>,
+): DecorationSet {
+  return Decoration.set(
+    ranges.flatMap((range) => {
+      if (range.from >= range.to || range.to > state.doc.length) return [];
+      const source = state.doc.sliceString(range.from, range.to);
+      const title =
+        source.match(/^\s*\*\s+#{1,6}\s+(.+)$/m)?.[1]?.trim() ??
+        "Teaching note";
+      const indentation = source.match(/^\s*/)?.[0].replace(/\n/g, "").length ?? 0;
+      const isExpanded = expanded.has(range.from);
+      const widget = new CommentToggleWidget(
+        isExpanded,
+        indentation,
+        range.from,
+        title,
+      );
+
+      return isExpanded
+        ? [Decoration.widget({ block: true, side: -1, widget }).range(range.from)]
+        : [Decoration.replace({ block: true, widget }).range(range.from, range.to)];
+    }),
+    true,
+  );
+}
+
+const commentDisplayState = StateField.define<CommentDisplayState>({
+  create: () => ({
+    decorations: Decoration.none,
+    expanded: new Set<number>(),
+    ranges: [],
+  }),
+  update: (value, transaction) => {
+    let ranges = value.ranges.map((range) => ({
+      from: transaction.changes.mapPos(range.from),
+      to: transaction.changes.mapPos(range.to),
+    }));
+    let expanded = new Set(
+      [...value.expanded].map((position) => transaction.changes.mapPos(position)),
+    );
 
     for (const effect of transaction.effects) {
-      if (effect.is(hiddenCommentsEffect)) {
-        next = Decoration.set(
-          effect.value.map((range) =>
-            Decoration.replace({ block: true }).range(range.from, range.to),
-          ),
-          true,
-        );
+      if (effect.is(commentDisplayEffect)) {
+        ranges = effect.value.ranges;
+        expanded = effect.value.expandAll
+          ? new Set(ranges.map((range) => range.from))
+          : new Set<number>();
+      } else if (effect.is(toggleCommentEffect)) {
+        if (expanded.has(effect.value)) expanded.delete(effect.value);
+        else expanded.add(effect.value);
       }
     }
 
-    return next;
+    return {
+      decorations: commentDisplayDecorations(transaction.state, ranges, expanded),
+      expanded,
+      ranges,
+    };
   },
-  provide: (field) => EditorView.decorations.from(field),
+  provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
 });
 
 function markdownCommentDecorations(
@@ -383,7 +493,7 @@ export function createEditor({
       breakpointState,
       breakpointGutter(onBreakpointsChange),
       activeRangeState,
-      hiddenCommentsState,
+      commentDisplayState,
       markdownCommentsState,
       guidedRangeState,
       highlightSpecialChars(),
@@ -519,6 +629,38 @@ export function createEditor({
           ".cm-comment-delimiter": {
             opacity: "0.45",
           },
+          ".cm-comment-toggle-row": {
+            boxSizing: "border-box",
+            paddingBottom: "2px",
+            paddingTop: "2px",
+          },
+          ".cm-comment-toggle": {
+            alignItems: "center",
+            backgroundColor: "rgba(138, 180, 248, 0.07)",
+            border: "1px solid rgba(138, 180, 248, 0.16)",
+            borderRadius: "4px",
+            color: "#9aa0a6",
+            cursor: "pointer",
+            display: "inline-flex",
+            font: "11px/1.5 var(--debug-mono)",
+            gap: "6px",
+            padding: "2px 7px",
+          },
+          ".cm-comment-toggle:hover": {
+            backgroundColor: "rgba(138, 180, 248, 0.13)",
+            borderColor: "rgba(138, 180, 248, 0.3)",
+            color: "#bdc1c6",
+          },
+          ".cm-comment-toggle:focus-visible": {
+            outline: "1px solid #8ab4f8",
+            outlineOffset: "1px",
+          },
+          ".cm-comment-toggle-chevron": {
+            color: "#8ab4f8",
+            display: "inline-block",
+            textAlign: "center",
+            width: "8px",
+          },
           ".cm-selectionBackground, ::selection": {
             backgroundColor: "rgba(138, 180, 248, 0.27) !important",
           },
@@ -613,7 +755,7 @@ export function setCommentVisibility(
 ): void {
   view.dispatch({
     effects: [
-      hiddenCommentsEffect.of(visible ? [] : ranges),
+      commentDisplayEffect.of({ expandAll: visible, ranges }),
       markdownCommentsEffect.of(ranges),
     ],
   });
