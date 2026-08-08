@@ -18,8 +18,8 @@ An embeddable custom element that teaches synchronous TypeScript execution using
 * Curriculum groups ordered from fundamentals through compiler algorithms
 * Live variable-value and Markdown documentation hovers
 * Automatic restart after a completed run
-* Unified lesson walkthrough in the right teaching panel
-* Individually collapsible teaching comments, collapsed by default
+* Unified lesson walkthrough in the right sidebar, or an optional bottom panel
+* Teaching comments fold in the editor and expand on the active line
 * Runtime controls in the right sidebar
 
 ## Included lessons
@@ -73,6 +73,8 @@ if (teachingDebugger) {
 <ts-teaching-debugger id="teaching-debugger"></ts-teaching-debugger>
 ```
 
+Move the "Why this line exists" panel under the editor with `teaching-placement="bottom"` or `teachingPlacement = "bottom"`.
+
 For static snippets, an inert child script is also supported:
 
 ```html
@@ -100,9 +102,29 @@ ts-teaching-debugger {
 Properties:
 
 * `code: string`
+* `teachingNotes: Record<number, TeachingNote>` - Markdown lesson notes keyed by the source line they explain; use this to keep notes out of the displayed TypeScript
 * `breakpoints: number[]` - all active permanent and one-time breakpoints
 * `oneTimeBreakpoints: number[]` - breakpoints removed after their first pause
 * `autoResetDelay: number` - milliseconds before reset; use `-1` to disable
+* `teachingPlacement: "bottom" | "sidebar"` - where the "Why this line exists" panel is shown; defaults to `"sidebar"`
+
+Lesson notes can be supplied separately from the source:
+
+```ts
+teachingDebugger.code = `const values = [8, 3, 11, 6, 2];
+const result = linearSearch(values, 6);`;
+
+teachingDebugger.teachingNotes = {
+  1: {
+    title: "Create the search list",
+    explanation: "The values can be in **any order** for linear search.",
+  },
+  2: {
+    title: "Run the search",
+    explanation: "Search from left to right for `6`.",
+  },
+};
+```
 
 Place a Markdown JSDoc block immediately above an executable line. The debugger
 uses it for the "Why this line exists" panel:
@@ -156,10 +178,9 @@ each argument. The `### Question` and `### Solution` sections are optional. Cont
 from the current editor source after edits, rather than held in separate lesson
 metadata.
 
-Teaching comments begin as compact collapsed rows and can be expanded
-individually. When expanded, headings, bold text, and inline code receive
-readable Markdown styling in the editor. Full content remains available to the
-teaching panel and hovers while collapsed.
+Teaching comments stay collapsed in the editor until their line is reached, then
+expand in place. Moving on folds the previous comment and opens the next one.
+Full content remains available to the teaching panel and hovers while collapsed.
 
 Questions use multiple-choice options. `### Choices` contains the options and
 `### Answer` contains the one-based number of the correct option. Generated

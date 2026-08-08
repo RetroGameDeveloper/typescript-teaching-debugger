@@ -31,8 +31,13 @@ describe("example source layout", () => {
           : [];
       });
 
-      expect(example.code.startsWith("/**\n * # Problem")).toBe(true);
-      expect(example.code).toContain(" * ## How it works");
+      if (example.teachingNotes) {
+        expect(example.code).not.toContain("/**");
+        expect(example.teachingNotes[1]?.title).toBe("Problem");
+      } else {
+        expect(example.code.startsWith("/**\n * # Problem")).toBe(true);
+        expect(example.code).toContain(" * ## How it works");
+      }
       expect(firstFunction).toBeGreaterThan(0);
       expect(reportIndexes.length).toBeGreaterThan(0);
       expect(reportIndexes.every((index) => index > lastFunction)).toBe(true);

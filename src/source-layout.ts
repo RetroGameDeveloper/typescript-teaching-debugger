@@ -72,6 +72,10 @@ export function reorderForLearning(code: string): ReorderedCode {
   return { code: output.join("\n"), lineMap };
 }
 
+function jsdocTextLines(text: string): string[] {
+  return text.split("\n").map((line) => (line.trim() === "" ? " *" : ` * ${line}`));
+}
+
 export function problemComment(
   title: string,
   analogy: string,
@@ -83,11 +87,11 @@ export function problemComment(
     " *",
     ` * **${title}**`,
     " *",
-    ` * ${analogy}`,
+    ...jsdocTextLines(analogy),
     " *",
     " * ## How it works",
     " *",
-    ` * ${explanation}`,
+    ...jsdocTextLines(explanation),
     " */",
   ].join("\n");
 }

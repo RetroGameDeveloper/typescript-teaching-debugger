@@ -65,6 +65,7 @@ function selectExample(example: AlgorithmExample): void {
 
   if (teachingDebugger) {
     teachingDebugger.code = example.code;
+    teachingDebugger.teachingNotes = example.teachingNotes;
     teachingDebugger.breakpoints = [];
     teachingDebugger.oneTimeBreakpoints = example.breakpoints;
   }

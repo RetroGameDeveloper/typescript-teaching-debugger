@@ -29,6 +29,7 @@ import {
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import type { ExecutionPoint } from "./core/types";
+import { renderMarkdown } from "./markdown";
 
 interface BreakpointChange {
   kind?: BreakpointKind;
@@ -38,6 +39,8 @@ interface BreakpointChange {
 export type BreakpointKind = "regular" | "once";
 
 interface ActiveRange {
+  focusFrom: number;
+  focusTo: number;
   from: number;
   lineFrom: number;
   lineTo: number;
@@ -46,6 +49,8 @@ interface ActiveRange {
 
 export interface EditorRange {
   from: number;
+  markdown?: string;
+  title?: string;
   to: number;
 }
 
@@ -60,6 +65,8 @@ const activeRangeEffect = StateEffect.define<ActiveRange | null>({
   map: (value, mapping) =>
     value
       ? {
+          focusFrom: mapping.mapPos(value.focusFrom),
+          focusTo: mapping.mapPos(value.focusTo),
           from: mapping.mapPos(value.from),
           lineFrom: mapping.mapPos(value.lineFrom),
           lineTo: mapping.mapPos(value.lineTo),
@@ -72,6 +79,8 @@ const guidedRangeEffect = StateEffect.define<ActiveRange | null>({
   map: (value, mapping) =>
     value
       ? {
+          focusFrom: mapping.mapPos(value.focusFrom),
+          focusTo: mapping.mapPos(value.focusTo),
           from: mapping.mapPos(value.from),
           lineFrom: mapping.mapPos(value.lineFrom),
           lineTo: mapping.mapPos(value.lineTo),
@@ -81,9 +90,13 @@ const guidedRangeEffect = StateEffect.define<ActiveRange | null>({
 });
 
 interface CommentDisplayChange {
-  expandAll: boolean;
+  expandAll?: boolean;
   ranges: EditorRange[];
 }
+
+const expandCommentsEffect = StateEffect.define<number[]>({
+  map: (positions, mapping) => positions.map((position) => mapping.mapPos(position)),
+});
 
 interface CommentDisplayState {
   decorations: DecorationSet;
@@ -95,6 +108,7 @@ const commentDisplayEffect = StateEffect.define<CommentDisplayChange>({
   map: (value, mapping) => ({
     ...value,
     ranges: value.ranges.map((range) => ({
+      ...range,
       from: mapping.mapPos(range.from),
       to: mapping.mapPos(range.to),
     })),
@@ -108,6 +122,7 @@ const toggleCommentEffect = StateEffect.define<number>({
 const markdownCommentsEffect = StateEffect.define<EditorRange[]>({
   map: (ranges, mapping) =>
     ranges.map((range) => ({
+      ...range,
       from: mapping.mapPos(range.from),
       to: mapping.mapPos(range.to),
     })),
@@ -215,19 +230,19 @@ const activeRangeState = StateField.define<DecorationSet>({
         );
       }
 
-      if (effect.value.lineFrom > 0) {
+      if (effect.value.focusFrom > 0) {
         ranges.push(
           Decoration.mark({ class: "cm-debug-dim" }).range(
             0,
-            effect.value.lineFrom,
+            effect.value.focusFrom,
           ),
         );
       }
 
-      if (effect.value.lineTo < transaction.state.doc.length) {
+      if (effect.value.focusTo < transaction.state.doc.length) {
         ranges.push(
           Decoration.mark({ class: "cm-debug-dim" }).range(
-            effect.value.lineTo,
+            effect.value.focusTo,
             transaction.state.doc.length,
           ),
         );
@@ -245,6 +260,7 @@ class CommentToggleWidget extends WidgetType {
   constructor(
     private readonly expanded: boolean,
     private readonly indentation: number,
+    private readonly markdown: string,
     private readonly position: number,
     private readonly title: string,
   ) {
@@ -255,6 +271,7 @@ class CommentToggleWidget extends WidgetType {
     return (
       other.expanded === this.expanded &&
       other.indentation === this.indentation &&
+      other.markdown === this.markdown &&
       other.position === this.position &&
       other.title === this.title
     );
@@ -263,6 +280,7 @@ class CommentToggleWidget extends WidgetType {
   toDOM(view: EditorView): HTMLElement {
     const wrapper = document.createElement("div");
     wrapper.className = "cm-comment-toggle-row";
+    wrapper.dataset.expanded = String(this.expanded);
     wrapper.style.paddingLeft = `${this.indentation}ch`;
     const button = document.createElement("button");
     button.className = "cm-comment-toggle";
@@ -275,18 +293,46 @@ class CommentToggleWidget extends WidgetType {
     );
     const chevron = document.createElement("span");
     chevron.className = "cm-comment-toggle-chevron";
-    chevron.textContent = this.expanded ? "v" : ">";
+    chevron.setAttribute("aria-hidden", "true");
+    const eyebrow = document.createElement("span");
+    eyebrow.className = "cm-comment-toggle-eyebrow";
+    eyebrow.textContent = "Lesson note";
     const label = document.createElement("span");
+    label.className = "cm-comment-toggle-label";
     label.textContent = this.title;
-    button.append(chevron, label);
+    const labelGroup = document.createElement("span");
+    labelGroup.className = "cm-comment-toggle-label-group";
+    if (this.expanded) labelGroup.append(eyebrow);
+    labelGroup.append(label);
+    button.append(chevron, labelGroup);
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
       view.dispatch({ effects: toggleCommentEffect.of(this.position) });
     });
     wrapper.append(button);
+
+    if (this.expanded) {
+      const content = document.createElement("div");
+      content.className = "cm-comment-card-content";
+      renderMarkdown(content, this.markdown);
+      wrapper.append(content);
+    }
     return wrapper;
   }
+}
+
+function markdownFromTeachingComment(source: string): string {
+  const markdown = source
+    .replace(/^\s*\/\*\*?\s?/, "")
+    .replace(/\s*\*\/\s*$/, "")
+    .split("\n")
+    .map((line) => line.replace(/^\s*\* ?/, ""))
+    .join("\n")
+    .trim();
+
+  // The title lives in the card header, so avoid repeating its Markdown heading.
+  return markdown.replace(/^#{1,6}\s+.*(?:\n+|$)/, "").trim();
 }
 
 function commentDisplayDecorations(
@@ -296,21 +342,22 @@ function commentDisplayDecorations(
 ): DecorationSet {
   return Decoration.set(
     ranges.flatMap((range) => {
-      if (range.from >= range.to || range.to > state.doc.length) return [];
+      if (range.from > range.to || range.to > state.doc.length) return [];
       const source = state.doc.sliceString(range.from, range.to);
       const title =
-        source.match(/^\s*\*\s+#{1,6}\s+(.+)$/m)?.[1]?.trim() ??
+        range.title ?? source.match(/^\s*\*\s+#{1,6}\s+(.+)$/m)?.[1]?.trim() ??
         "Teaching note";
       const indentation = source.match(/^\s*/)?.[0].replace(/\n/g, "").length ?? 0;
       const isExpanded = expanded.has(range.from);
       const widget = new CommentToggleWidget(
         isExpanded,
         indentation,
+        range.markdown ?? markdownFromTeachingComment(source),
         range.from,
         title,
       );
 
-      return isExpanded
+      return range.from === range.to
         ? [Decoration.widget({ block: true, side: -1, widget }).range(range.from)]
         : [Decoration.replace({ block: true, widget }).range(range.from, range.to)];
     }),
@@ -326,6 +373,7 @@ const commentDisplayState = StateField.define<CommentDisplayState>({
   }),
   update: (value, transaction) => {
     let ranges = value.ranges.map((range) => ({
+      ...range,
       from: transaction.changes.mapPos(range.from),
       to: transaction.changes.mapPos(range.to),
     }));
@@ -336,9 +384,15 @@ const commentDisplayState = StateField.define<CommentDisplayState>({
     for (const effect of transaction.effects) {
       if (effect.is(commentDisplayEffect)) {
         ranges = effect.value.ranges;
-        expanded = effect.value.expandAll
-          ? new Set(ranges.map((range) => range.from))
-          : new Set<number>();
+        if (effect.value.expandAll === true) {
+          expanded = new Set(ranges.map((range) => range.from));
+        } else if (effect.value.expandAll === false) {
+          expanded = new Set<number>();
+        }
+        const valid = new Set(ranges.map((range) => range.from));
+        expanded = new Set([...expanded].filter((position) => valid.has(position)));
+      } else if (effect.is(expandCommentsEffect)) {
+        expanded = new Set(effect.value);
       } else if (effect.is(toggleCommentEffect)) {
         if (expanded.has(effect.value)) expanded.delete(effect.value);
         else expanded.add(effect.value);
@@ -453,19 +507,19 @@ const guidedRangeState = StateField.define<DecorationSet>({
         ),
       ];
 
-      if (effect.value.lineFrom > 0) {
+      if (effect.value.focusFrom > 0) {
         ranges.push(
           Decoration.mark({ class: "cm-guided-dim" }).range(
             0,
-            effect.value.lineFrom,
+            effect.value.focusFrom,
           ),
         );
       }
 
-      if (effect.value.lineTo < transaction.state.doc.length) {
+      if (effect.value.focusTo < transaction.state.doc.length) {
         ranges.push(
           Decoration.mark({ class: "cm-guided-dim" }).range(
-            effect.value.lineTo,
+            effect.value.focusTo,
             transaction.state.doc.length,
           ),
         );
@@ -695,36 +749,143 @@ export function createEditor({
             opacity: "0.45",
           },
           ".cm-comment-toggle-row": {
+            backgroundColor: "rgba(32, 35, 42, 0.96)",
+            border: "1px solid rgba(138, 180, 248, 0.18)",
+            borderLeft: "3px solid rgba(138, 180, 248, 0.75)",
+            borderRadius: "6px",
             boxSizing: "border-box",
-            paddingBottom: "2px",
-            paddingTop: "2px",
+            boxShadow: "0 3px 12px rgba(0, 0, 0, 0.14)",
+            margin: "3px 10px 3px 4px",
+            maxWidth: "760px",
+            overflow: "hidden",
+            padding: "0 !important",
+            transition: "background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, filter 160ms ease, opacity 160ms ease",
+          },
+          ".cm-comment-toggle-row[data-expanded='true']": {
+            backgroundColor: "rgba(34, 38, 48, 0.98)",
+            borderColor: "rgba(138, 180, 248, 0.35)",
+            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.24), inset 0 1px rgba(255, 255, 255, 0.025)",
+            width: "auto",
+          },
+          ".cm-comment-toggle-row[data-expanded='false']": {
+            borderLeftWidth: "2px",
+            boxShadow: "none",
+            display: "inline-block",
+            filter: "grayscale(1)",
+            maxWidth: "calc(100% - 18px)",
+            opacity: "0.3",
+            width: "max-content",
+          },
+          ".cm-comment-toggle-row[data-expanded='false']:hover, .cm-comment-toggle-row[data-expanded='false']:focus-within": {
+            filter: "grayscale(0.35)",
+            opacity: "0.72",
           },
           ".cm-comment-toggle": {
             alignItems: "center",
-            backgroundColor: "rgba(138, 180, 248, 0.07)",
-            border: "1px solid rgba(138, 180, 248, 0.16)",
-            borderRadius: "4px",
-            color: "#9aa0a6",
+            backgroundColor: "rgba(138, 180, 248, 0.055)",
+            border: "0",
+            color: "#c9d2df",
             cursor: "pointer",
-            display: "inline-flex",
-            font: "11px/1.5 var(--debug-mono)",
-            gap: "6px",
-            padding: "2px 7px",
+            display: "flex",
+            font: "12px/1.35 var(--debug-sans)",
+            gap: "9px",
+            padding: "7px 10px",
+            textAlign: "left",
+            width: "100%",
           },
           ".cm-comment-toggle:hover": {
-            backgroundColor: "rgba(138, 180, 248, 0.13)",
-            borderColor: "rgba(138, 180, 248, 0.3)",
-            color: "#bdc1c6",
+            backgroundColor: "rgba(138, 180, 248, 0.11)",
+            color: "#f1f3f4",
+          },
+          ".cm-comment-toggle[data-expanded='false']": {
+            font: "11px/1.25 var(--debug-sans)",
+            gap: "6px",
+            padding: "3px 7px",
           },
           ".cm-comment-toggle:focus-visible": {
             outline: "1px solid #8ab4f8",
             outlineOffset: "1px",
           },
           ".cm-comment-toggle-chevron": {
+            borderBottom: "1.5px solid #8ab4f8",
+            borderRight: "1.5px solid #8ab4f8",
             color: "#8ab4f8",
             display: "inline-block",
-            textAlign: "center",
-            width: "8px",
+            flex: "0 0 auto",
+            height: "6px",
+            marginLeft: "2px",
+            transform: "rotate(-45deg)",
+            transition: "transform 180ms ease",
+            width: "6px",
+          },
+          ".cm-comment-toggle[data-expanded='true'] .cm-comment-toggle-chevron": {
+            transform: "rotate(45deg) translate(-1px, -1px)",
+          },
+          ".cm-comment-toggle-label-group": {
+            display: "flex",
+            flexDirection: "column",
+            gap: "1px",
+            minWidth: "0",
+          },
+          ".cm-comment-toggle[data-expanded='false'] .cm-comment-toggle-label-group": {
+            display: "block",
+          },
+          ".cm-comment-toggle-eyebrow": {
+            color: "#8ab4f8",
+            font: "700 8px/1.2 var(--debug-mono)",
+            letterSpacing: "0.09em",
+            textTransform: "uppercase",
+          },
+          ".cm-comment-toggle-label": {
+            fontWeight: "600",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          },
+          ".cm-comment-card-content": {
+            animation: "cm-comment-reveal 180ms ease-out both",
+            borderTop: "1px solid rgba(138, 180, 248, 0.14)",
+            color: "#bdc1c6",
+            font: "12px/1.62 var(--debug-sans)",
+            padding: "10px 13px 13px 30px",
+          },
+          ".cm-comment-card-content p": {
+            margin: "0",
+          },
+          ".cm-comment-card-content p + p": {
+            marginTop: "7px",
+          },
+          ".cm-comment-card-content ul": {
+            margin: "6px 0 0",
+            paddingLeft: "18px",
+          },
+          ".cm-comment-card-content li + li": {
+            marginTop: "3px",
+          },
+          ".cm-comment-card-content .markdown-heading": {
+            color: "#d7b8ff",
+            font: "700 10px/1.35 var(--debug-sans)",
+            letterSpacing: "0.06em",
+            margin: "11px 0 5px",
+            textTransform: "uppercase",
+          },
+          ".cm-comment-card-content .markdown-heading:first-child": {
+            marginTop: "0",
+          },
+          ".cm-comment-card-content code": {
+            backgroundColor: "rgba(138, 180, 248, 0.13)",
+            border: "1px solid rgba(138, 180, 248, 0.12)",
+            borderRadius: "4px",
+            color: "#b9d2fa",
+            font: "11px/1.4 var(--debug-mono)",
+            padding: "1px 4px",
+          },
+          ".cm-comment-card-content strong": {
+            color: "#e8eaed",
+          },
+          "@keyframes cm-comment-reveal": {
+            from: { opacity: "0", transform: "translateY(-5px)" },
+            to: { opacity: "1", transform: "translateY(0)" },
           },
           ".cm-selectionBackground, ::selection": {
             backgroundColor: "rgba(138, 180, 248, 0.27) !important",
@@ -747,6 +908,7 @@ export function createEditor({
 export function setActivePoint(
   view: EditorView,
   point?: ExecutionPoint,
+  focus?: EditorRange,
 ): void {
   if (!point) {
     view.dispatch({ effects: activeRangeEffect.of(null) });
@@ -757,8 +919,17 @@ export function setActivePoint(
   const from = Math.min(Math.max(point.range.start, 0), docLength);
   const to = Math.min(Math.max(point.range.end, from), docLength);
   const line = view.state.doc.lineAt(from);
+  const focusFrom = Math.min(focus?.from ?? line.from, line.from);
+  const focusTo = Math.max(focus?.to ?? line.to, line.to);
   view.dispatch({
-    effects: activeRangeEffect.of({ from, lineFrom: line.from, lineTo: line.to, to }),
+    effects: activeRangeEffect.of({
+      focusFrom,
+      focusTo,
+      from,
+      lineFrom: line.from,
+      lineTo: line.to,
+      to,
+    }),
     scrollIntoView: true,
     selection: { anchor: from },
   });
@@ -825,17 +996,36 @@ export function setEditorCode(view: EditorView, code: string): void {
 export function setCommentVisibility(
   view: EditorView,
   ranges: EditorRange[],
-  visible: boolean,
+  visible?: boolean,
 ): void {
   view.dispatch({
     effects: [
-      commentDisplayEffect.of({ expandAll: visible, ranges }),
+      commentDisplayEffect.of({
+        ...(visible === undefined ? {} : { expandAll: visible }),
+        ranges,
+      }),
       markdownCommentsEffect.of(ranges),
     ],
   });
 }
 
-export function setGuidedLine(view: EditorView, lineNumber?: number): void {
+export function setExpandedComments(
+  view: EditorView,
+  positions: Iterable<number>,
+): void {
+  const next = [...new Set(positions)];
+  const current = view.state.field(commentDisplayState).expanded;
+  if (next.length === current.size && next.every((position) => current.has(position))) {
+    return;
+  }
+  view.dispatch({ effects: expandCommentsEffect.of(next) });
+}
+
+export function setGuidedLine(
+  view: EditorView,
+  lineNumber?: number,
+  focus?: EditorRange,
+): void {
   if (!lineNumber || lineNumber < 1 || lineNumber > view.state.doc.lines) {
     view.dispatch({ effects: guidedRangeEffect.of(null) });
     return;
@@ -844,8 +1034,12 @@ export function setGuidedLine(view: EditorView, lineNumber?: number): void {
   const line = view.state.doc.line(lineNumber);
   const contentOffset = line.text.search(/\S/);
   const from = contentOffset >= 0 ? line.from + contentOffset : line.from;
+  const focusFrom = Math.min(focus?.from ?? line.from, line.from);
+  const focusTo = Math.max(focus?.to ?? line.to, line.to);
   view.dispatch({
     effects: guidedRangeEffect.of({
+      focusFrom,
+      focusTo,
       from,
       lineFrom: line.from,
       lineTo: line.to,

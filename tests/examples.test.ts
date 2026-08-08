@@ -6,6 +6,11 @@ import { parseTeachingComments, teachingNotesFromComments } from "../src/teachin
 describe("algorithm examples", () => {
   for (const example of algorithmExamples) {
     it(`introduces ${example.title} before its guided code steps`, () => {
+      if (example.teachingNotes) {
+        expect(example.code).not.toContain("/**");
+        expect(example.teachingNotes[1]?.title).toBe("Problem");
+        return;
+      }
       const comments = parseTeachingComments(example.code);
 
       expect(comments[0]?.title).toBe("Problem");
@@ -24,7 +29,7 @@ describe("algorithm examples", () => {
 
     it(`explains every reachable line in ${example.title}`, async () => {
       const engine = new DebuggerEngine(example.code);
-      const notes = teachingNotesFromComments(example.code);
+      const notes = example.teachingNotes ?? teachingNotesFromComments(example.code);
       let result = await engine.advance("into");
 
       for (let step = 0; step < 5000 && result.status === "paused"; step += 1) {

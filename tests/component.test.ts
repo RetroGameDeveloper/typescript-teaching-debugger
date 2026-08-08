@@ -37,13 +37,13 @@ console.log(answer);`;
     expect(element.shadowRoot?.querySelector(".shell")).not.toBeNull();
     expect(element.breakpoints).toEqual([12]);
     expect(element.code).toContain("answer: number");
-    const collapsedComment = element.shadowRoot?.querySelector<HTMLButtonElement>(
-      '.cm-comment-toggle[data-expanded="false"]',
+    const expandedComment = element.shadowRoot?.querySelector<HTMLButtonElement>(
+      '.cm-comment-toggle[data-expanded="true"]',
     );
-    expect(collapsedComment).not.toBeNull();
-    collapsedComment?.click();
+    expect(expandedComment).not.toBeNull();
+    expandedComment?.click();
     expect(
-      element.shadowRoot?.querySelector('.cm-comment-toggle[data-expanded="true"]'),
+      element.shadowRoot?.querySelector('.cm-comment-toggle[data-expanded="false"]'),
     ).not.toBeNull();
 
     const completed = await element.resume();
@@ -140,6 +140,7 @@ console.log(answer);`;
       "ts-teaching-debugger",
     ) as TsTeachingDebuggerElement;
     element.code = linearSearch?.code ?? "";
+    element.teachingNotes = linearSearch?.teachingNotes;
     document.body.append(element);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -152,9 +153,7 @@ console.log(answer);`;
     ).toBe("Linear search");
     expect(element.shadowRoot?.querySelector(".guided-overlay")).toBeNull();
     expect(element.shadowRoot?.querySelector(".ast-token")).toBeNull();
-    const lessonLines = parseTeachingComments(linearSearch?.code ?? "")
-      .map((comment) => comment.line)
-      .filter((line) => !(linearSearch?.code.split("\n")[line - 1] ?? "").trimStart().startsWith("/**"));
+    const lessonLines = Object.keys(linearSearch?.teachingNotes ?? {}).map(Number);
     expect(lessonLines.every((line) => element.breakpoints.includes(line))).toBe(true);
 
     await element.reset();
@@ -263,6 +262,92 @@ console.log(answer);`;
       [...(element.shadowRoot?.querySelectorAll<HTMLElement>(".cm-breakpoint-marker") ?? [])]
         .filter((marker) => marker.style.visibility !== "hidden"),
     ).toHaveLength(0);
+  });
+
+  it("keeps the teaching card in the sidebar by default", async () => {
+    const element = document.createElement(
+      "ts-teaching-debugger",
+    ) as TsTeachingDebuggerElement;
+    element.code = "const value = 1;";
+    document.body.append(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(element.teachingPlacement).toBe("sidebar");
+    expect(
+      element.shadowRoot
+        ?.querySelector(".teaching-card")
+        ?.closest("[data-teaching-host]")
+        ?.getAttribute("data-teaching-host"),
+    ).toBe("sidebar");
+    expect(
+      element.shadowRoot?.querySelector(".shell")?.getAttribute("data-teaching-placement"),
+    ).toBe("sidebar");
+
+    element.teachingPlacement = "bottom";
+    expect(element.teachingPlacement).toBe("bottom");
+    expect(
+      element.shadowRoot
+        ?.querySelector(".teaching-card")
+        ?.closest("[data-teaching-host]")
+        ?.getAttribute("data-teaching-host"),
+    ).toBe("bottom");
+  });
+
+  it("honors the teaching-placement attribute", async () => {
+    const element = document.createElement(
+      "ts-teaching-debugger",
+    ) as TsTeachingDebuggerElement;
+    element.setAttribute("teaching-placement", "bottom");
+    element.code = "const value = 1;";
+    document.body.append(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(element.teachingPlacement).toBe("bottom");
+    expect(
+      element.shadowRoot?.querySelector(
+        '[data-teaching-host="bottom"] .teaching-card',
+      ),
+    ).not.toBeNull();
+    expect(
+      element.shadowRoot?.querySelector(
+        '[data-teaching-host="sidebar"] .teaching-card',
+      ),
+    ).toBeNull();
+  });
+
+  it("expands the active teaching comment and folds the previous one", async () => {
+    const annotated = annotateCode(
+      "const first = 1;\nconst second = first + 1;",
+      {
+        1: { title: "Create the first value", explanation: "Stores `1`." },
+        2: { title: "Create the second value", explanation: "Adds one more." },
+      },
+    );
+    const element = document.createElement(
+      "ts-teaching-debugger",
+    ) as TsTeachingDebuggerElement;
+    element.code = annotated.code;
+    document.body.append(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const initialToggles = [
+      ...(element.shadowRoot?.querySelectorAll<HTMLButtonElement>(".cm-comment-toggle") ?? []),
+    ];
+    expect(initialToggles.map((toggle) => toggle.dataset.expanded)).toEqual([
+      "true",
+      "false",
+    ]);
+
+    await element.resume();
+    await element.resume();
+
+    const nextToggles = [
+      ...(element.shadowRoot?.querySelectorAll<HTMLButtonElement>(".cm-comment-toggle") ?? []),
+    ];
+    expect(nextToggles.map((toggle) => toggle.dataset.expanded)).toEqual([
+      "false",
+      "true",
+    ]);
   });
 
   it("steps backwards to an earlier executable state", async () => {

@@ -26,9 +26,11 @@ import {
   setCommentVisibility,
   setEditorBreakpoints,
   setEditorCode,
+  setExpandedComments,
   setGuidedLine,
   type BreakpointKind,
 } from "./editor";
+import { renderMarkdown } from "./markdown";
 import { debuggerStyles } from "./styles";
 import {
   parseTeachingComments,
@@ -75,9 +77,27 @@ const runtimeTeachingNotes: Record<string, string> = {
     "The condition decides whether the loop body runs again.",
 };
 
+export type TeachingPlacement = "bottom" | "sidebar";
+
+const teachingCardTemplate = `
+        <div class="teaching-card">
+          <h2 class="teaching-title">Ready to run</h2>
+          <div class="teaching-copy">Execution pauses before each executable AST node. Type-only syntax is parsed but skipped at runtime.</div>
+          <div class="teaching-question" hidden>
+            <p class="question-label">Question</p>
+            <div class="question-prompt"></div>
+            <div class="question-choices" role="radiogroup" aria-label="Choose an answer"></div>
+            <button class="solution-toggle" type="button">Check answer</button>
+            <div class="teaching-solution" hidden>
+              <p class="solution-label">Solution</p>
+              <div class="solution-copy"></div>
+            </div>
+          </div>
+        </div>`;
+
 const componentTemplate = `
   <style>${debuggerStyles}</style>
-  <div class="shell" tabindex="0">
+  <div class="shell" data-teaching-placement="sidebar" tabindex="0">
     <header class="tab-strip">
       <div class="file-tab"><span class="ts-badge">TS</span><span>lesson.ts</span></div>
       <div class="mode-badge"><span class="mode-dot"></span>AST runtime</div>
@@ -98,21 +118,7 @@ const componentTemplate = `
             <button class="tool-button" data-command="restart" type="button" aria-label="Restart" title="Restart (Ctrl+Shift+F5)"></button>
           </div>
         </div>
-        <div class="teaching-card">
-          <p class="teaching-kicker">Why this line exists</p>
-          <p class="teaching-title">Ready to run</p>
-          <div class="teaching-question" hidden>
-            <p class="question-label">Question</p>
-            <div class="question-prompt"></div>
-            <div class="question-choices" role="radiogroup" aria-label="Choose an answer"></div>
-            <button class="solution-toggle" type="button">Check answer</button>
-            <div class="teaching-solution" hidden>
-              <p class="solution-label">Solution</p>
-              <div class="solution-copy"></div>
-            </div>
-          </div>
-          <div class="teaching-copy">Execution pauses before each executable AST node. Type-only syntax is parsed but skipped at runtime.</div>
-        </div>
+        <div class="teaching-host" data-teaching-host="sidebar" hidden></div>
         <section class="panel-section" data-section="scope" data-collapsed="false">
           <button class="section-toggle" type="button" aria-expanded="true"><span data-chevron></span>Scope<span class="section-count">0</span></button>
           <div class="section-content scope-content"><div class="empty-state">No active scope</div></div>
@@ -131,6 +137,9 @@ const componentTemplate = `
         </section>
       </aside>
     </div>
+    <section class="teaching-host teaching-bottom-panel" data-teaching-host="bottom" aria-label="Lesson explanation">
+      ${teachingCardTemplate}
+    </section>
     <footer class="statusbar">
       <span class="statusbar-state" data-status="ready"><span class="status-indicator"></span><span class="status-label">Ready</span></span>
       <span class="cursor-location">Ln 1, Col 1</span>
@@ -146,71 +155,6 @@ function icon(node: IconNode): SVGElement {
     height: 16,
     width: 16,
   });
-}
-
-function appendInlineMarkdown(parent: HTMLElement, source: string): void {
-  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g;
-  let cursor = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(source))) {
-    parent.append(document.createTextNode(source.slice(cursor, match.index)));
-    const token = match[0];
-    const element = document.createElement(
-      token.startsWith("`") ? "code" : token.startsWith("**") ? "strong" : "em",
-    );
-    element.textContent = token.startsWith("**")
-      ? token.slice(2, -2)
-      : token.slice(1, -1);
-    parent.append(element);
-    cursor = match.index + token.length;
-  }
-
-  parent.append(document.createTextNode(source.slice(cursor)));
-}
-
-function renderMarkdown(target: HTMLElement, markdown: string): void {
-  target.replaceChildren();
-  const lines = markdown.split("\n");
-  let list: HTMLUListElement | undefined;
-
-  for (const rawLine of lines) {
-    const line = rawLine.trim();
-
-    if (!line) {
-      list = undefined;
-      continue;
-    }
-
-    const listItem = line.match(/^[-*]\s+(.+)$/);
-
-    if (listItem) {
-      if (!list) {
-        list = document.createElement("ul");
-        target.append(list);
-      }
-      const item = document.createElement("li");
-      appendInlineMarkdown(item, listItem[1] ?? "");
-      list.append(item);
-      continue;
-    }
-
-    const heading = line.match(/^(#{1,6})\s+(.+)$/);
-    if (heading?.[1] && heading[2]) {
-      list = undefined;
-      const headingElement = document.createElement("h3");
-      headingElement.className =
-        `markdown-heading markdown-heading-${heading[1].length}`;
-      appendInlineMarkdown(headingElement, heading[2]);
-      target.append(headingElement);
-      continue;
-    }
-
-    list = undefined;
-    const paragraph = document.createElement("p");
-    appendInlineMarkdown(paragraph, line);
-    target.append(paragraph);
-  }
 }
 
 interface MultipleChoiceAssessment {
@@ -326,12 +270,14 @@ function isExpandable(value: unknown): value is object {
 }
 
 export class TsTeachingDebuggerElement extends HTMLElement {
-  static readonly observedAttributes = ["code", "readonly"];
+  static readonly observedAttributes = ["code", "readonly", "teaching-placement"];
 
   private _breakpoints = new Set<number>();
   private _oneTimeBreakpoints = new Set<number>();
   private _autoResetDelay = 1000;
   private _code = "";
+  private _teachingPlacement: TeachingPlacement = "sidebar";
+  private expandedCommentKey?: string;
   private completionResetTimer?: ReturnType<typeof setTimeout>;
   private consoleEntries: ConsoleEntry[] = [];
   private editor?: EditorView;
@@ -342,6 +288,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   private snapshot: DebuggerSnapshot = { status: "ready" };
   private suppressEditorChange = false;
   private _teachingNotes: TeachingNotes = {};
+  private _providedTeachingNotes?: TeachingNotes;
   private questionSelection?: number;
   private solutionVisible = false;
   private teachingLine?: number;
@@ -373,6 +320,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
 
     if (this.editor) {
       this.followingRuntime = false;
+      this.expandedCommentKey = undefined;
       this.dismissedLessonBreakpoints.clear();
       this.consumedOneTimeBreakpoints.clear();
       this.executionHistory = [];
@@ -412,6 +360,31 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this.syncBreakpoints();
   }
 
+  get teachingPlacement(): TeachingPlacement {
+    return this._teachingPlacement;
+  }
+
+  get teachingNotes(): TeachingNotes {
+    return this._providedTeachingNotes ?? {};
+  }
+
+  set teachingNotes(value: TeachingNotes | undefined) {
+    this._providedTeachingNotes = value;
+    if (this.editor) {
+      this.refreshTeachingComments();
+      void this.reset();
+    }
+  }
+
+  set teachingPlacement(value: TeachingPlacement | string) {
+    const placement: TeachingPlacement = value === "bottom" ? "bottom" : "sidebar";
+    this._teachingPlacement = placement;
+    if (this.getAttribute("teaching-placement") !== placement) {
+      this.setAttribute("teaching-placement", placement);
+    }
+    this.applyTeachingPlacement();
+  }
+
   connectedCallback(): void {
     if (this.shadowRoot) return;
 
@@ -424,6 +397,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
 
     const root = this.attachShadow({ mode: "open" });
     root.innerHTML = componentTemplate;
+    this.applyTeachingPlacement();
     this.addIcons();
     this.editor = createEditor({
       code: this._code,
@@ -456,6 +430,29 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     if (name === "code" && newValue !== null && newValue !== this._code) {
       this.code = newValue;
     }
+
+    if (name === "teaching-placement") {
+      this.teachingPlacement = newValue === "bottom" ? "bottom" : "sidebar";
+    }
+  }
+
+  private applyTeachingPlacement(): void {
+    if (!this.shadowRoot) return;
+
+    const shell = this.requiredElement<HTMLElement>(".shell");
+    shell.dataset.teachingPlacement = this._teachingPlacement;
+    const card = this.requiredElement<HTMLElement>(".teaching-card");
+    const sidebarHost = this.requiredElement<HTMLElement>(
+      '[data-teaching-host="sidebar"]',
+    );
+    const bottomHost = this.requiredElement<HTMLElement>(
+      '[data-teaching-host="bottom"]',
+    );
+    const activeHost = this._teachingPlacement === "sidebar" ? sidebarHost : bottomHost;
+    const idleHost = activeHost === sidebarHost ? bottomHost : sidebarHost;
+    idleHost.hidden = true;
+    activeHost.hidden = false;
+    activeHost.append(card);
   }
 
   async reset(): Promise<DebuggerSnapshot> {
@@ -466,6 +463,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this.consumedOneTimeBreakpoints.clear();
     this.executionHistory = [];
     this.followingRuntime = false;
+    this.expandedCommentKey = undefined;
     this.guidedIndex = 0;
     this.guidedQuestionSelection = undefined;
     this.guidedSolutionVisible = false;
@@ -678,7 +676,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   }
 
   private refreshTeachingComments(): void {
-    this._teachingNotes = teachingNotesFromComments(this._code);
+    this._teachingNotes = this._providedTeachingNotes ?? teachingNotesFromComments(this._code);
     this.teachingSymbols = parseTeachingSymbols(this._code);
     this.refreshGuidedComments();
     const sourceLines = this._code.split("\n");
@@ -698,7 +696,23 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   }
 
   private refreshGuidedComments(): void {
-    this.guidedComments = parseTeachingComments(this._code);
+    this.guidedComments = this._providedTeachingNotes
+      ? Object.entries(this._providedTeachingNotes)
+          .flatMap(([lineText, note]) => {
+            const line = Number(lineText);
+            const lineCount = this.editor?.state.doc.lines ?? 0;
+            if (!Number.isInteger(line) || line < 1 || line > lineCount) return [];
+            const from = this.editor?.state.doc.line(line).from ?? 0;
+            return [{
+              ...note,
+              from,
+              line,
+              markdown: note.explanation,
+              to: from,
+            }];
+          })
+          .sort((left, right) => left.line - right.line)
+      : parseTeachingComments(this._code);
 
     this.guidedIndex = Math.min(
       this.guidedIndex,
@@ -708,15 +722,35 @@ export class TsTeachingDebuggerElement extends HTMLElement {
 
   private renderGuidedDialog(): void {
     if (!this.editor) return;
-    const comment = this.guidedComments[this.guidedIndex];
+    const comment = this.followingRuntime ? undefined : this.activeTeachingComment();
 
-    if (this.followingRuntime || !comment) {
+    if (!comment) {
       setGuidedLine(this.editor);
       return;
     }
 
+    const lineNumber = this.guidedAnchorLine(comment);
+    const line = this.editor.state.doc.line(lineNumber);
     setActivePoint(this.editor);
-    setGuidedLine(this.editor, this.guidedAnchorLine(comment));
+    setGuidedLine(this.editor, lineNumber, { from: comment.from, to: line.to });
+  }
+
+  private activeTeachingComment(): TeachingComment | undefined {
+    if (this.followingRuntime) {
+      const line = this.snapshot.point?.range.startLine;
+      return this.guidedComments.find((comment) => comment.line === line);
+    }
+
+    return this.guidedComments[this.guidedIndex];
+  }
+
+  private syncActiveTeachingComment(): void {
+    if (!this.editor) return;
+    const comment = this.activeTeachingComment();
+    const key = comment ? String(comment.from) : "";
+    if (key === this.expandedCommentKey) return;
+    this.expandedCommentKey = key;
+    setExpandedComments(this.editor, comment ? [comment.from] : []);
   }
 
   private guidedAnchorLine(comment: TeachingComment): number {
@@ -809,11 +843,13 @@ export class TsTeachingDebuggerElement extends HTMLElement {
 
   private applyCommentVisibility(): void {
     if (!this.editor) return;
-    const ranges = parseTeachingComments(this._code).map(({ from, to }) => ({
+    const ranges = this.guidedComments.map(({ from, markdown, title, to }) => ({
       from,
+      markdown,
+      title,
       to,
     }));
-    setCommentVisibility(this.editor, ranges, false);
+    setCommentVisibility(this.editor, ranges);
   }
 
   private allBreakpoints(): Set<number> {
@@ -954,11 +990,22 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   }
 
   private render(): void {
+    const comment = this.activeTeachingComment();
+    const focus = comment && this.editor
+      ? {
+          from: comment.from,
+          to: this.editor.state.doc.line(
+            Math.min(comment.line, this.editor.state.doc.lines),
+          ).to,
+        }
+      : undefined;
     setActivePoint(
       this.editor!,
       this.followingRuntime ? this.snapshot.point : undefined,
+      focus,
     );
     this.renderGuidedDialog();
+    this.syncActiveTeachingComment();
     this.renderToolbar();
     this.renderTeachingCard();
     this.renderScope();

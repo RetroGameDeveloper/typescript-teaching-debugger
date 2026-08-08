@@ -1,6 +1,7 @@
 import { teachingNotesByExample } from "./example-notes";
 import { problemComment, reorderForLearning } from "./source-layout";
 import { annotateCode } from "./teaching";
+import type { TeachingNotes } from "./teaching";
 
 export type AlgorithmCategory =
   | "Compilers"
@@ -19,6 +20,7 @@ export interface AlgorithmExample {
   spaceComplexity: string;
   timeComplexity: string;
   title: string;
+  teachingNotes?: TeachingNotes;
 }
 
 interface BeginnerIntroduction {
@@ -48,8 +50,10 @@ const beginnerIntroductions: Record<string, BeginnerIntroduction> = {
     explanation: "Walk down the dominator tree. Give every definition a fresh number, replace each use with the current numbered version, and restore the previous version when leaving a branch.",
   },
   "linear-search": {
-    analogy: "Imagine looking for a red toy in a row of boxes. Open the first box, then the next one, and keep going until the toy appears.",
-    explanation: "Check each array value from left to right. Return its position as soon as it equals the target. If every value is checked without a match, return `-1`.",
+    analogy:
+      "Imagine a row of closed boxes, and you are looking for a red toy. Open the first box. If it is not there, open the next one. Keep going one box at a time. Stop as soon as you find the toy. If you open every box and never see it, you know it is not in the row.",
+    explanation:
+      "Linear search does the same thing with a list of numbers. Begin at the left, at index `0`. Compare that number with the target. If they match, return the index — that is where the target lives. If they do not match, move one step right and try again.\n\nThe list does not need to be sorted, but that also means you cannot skip items: the target could be anywhere. If you reach the end with no match, return `-1` to mean \"not found\".\n\nThis lesson searches `[8, 3, 11, 6, 2]` twice: once for `6`, which is there, and once for `4`, which is not.",
   },
   "binary-search": {
     analogy: "Imagine finding a word in a dictionary. Open near the middle, decide whether the word comes before or after that page, and ignore the half that cannot contain it.",
@@ -395,10 +399,10 @@ console.log("Renamed statements:", statements);`,
     id: "linear-search",
     title: "Linear search",
     category: "Searching",
-    description: "Scan each value until the target is found.",
+    description: "Look at each number from left to right until you find the target, or learn that it is missing.",
     timeComplexity: "O(n)",
     spaceComplexity: "O(1)",
-    breakpoints: [3, 4],
+    breakpoints: [3, 4, 8],
     code: `function linearSearch(values: number[], target: number): number {
   for (let index = 0; index < values.length; index += 1) {
     if (values[index] === target) {
@@ -410,8 +414,10 @@ console.log("Renamed statements:", statements);`,
 }
 
 const values = [8, 3, 11, 6, 2];
-const result = linearSearch(values, 6);
-console.log("Found at index:", result);`,
+const foundIndex = linearSearch(values, 6);
+const missingIndex = linearSearch(values, 4);
+console.log("Index of 6:", foundIndex);
+console.log("Index of 4:", missingIndex);`,
   },
   {
     id: "binary-search",
@@ -847,6 +853,23 @@ export const algorithmExamples: AlgorithmExample[] = sourceAlgorithmExamples.map
           ? line
           : noteLines.find((noteLine) => noteLine >= line) ?? line,
     );
+
+    if (example.id === "linear-search") {
+      const introduction = beginnerIntroductions[example.id];
+      return {
+        ...example,
+        breakpoints: questionLines,
+        code: reordered.code,
+        teachingNotes: {
+          ...reorderedNotes,
+          1: {
+            title: "Problem",
+            explanation: `**${example.title}**\n\n${introduction?.analogy ?? example.description}\n\n## How it works\n\n${introduction?.explanation ?? example.description}`,
+          },
+        },
+      };
+    }
+
     const annotated = annotateCode(
       reordered.code,
       reorderedNotes,

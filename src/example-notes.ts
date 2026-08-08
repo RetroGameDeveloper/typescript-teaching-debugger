@@ -132,15 +132,89 @@ export const teachingNotesByExample: Record<string, TeachingNotes> = {
     47: ["Run SSA renaming", "Counters start at zero and stacks start empty before the entry definition is processed."],
     48: ["Inspect the SSA form", "The output shows distinct versions on definitions and their corresponding uses."],
   }),
-  "linear-search": notes({
-    1: ["Define linear search", "This function scans an unsorted array until it finds the requested value."],
-    2: ["Inspect the next element", "The index advances once per item because an unsorted array offers no safe shortcut."],
-    3: ["Compare with the target", "This test checks whether the current array element is the value being sought."],
-    4: ["Return the matching index", "Finding the target ends the scan immediately with its location."],
-    11: ["Create the search input", "The unsorted values demonstrate why each position may need examination."],
-    12: ["Search for 6", "The returned index records where the target occurs in the sample array."],
-    13: ["Report the result", "This confirms the position discovered by the scan."],
-  }),
+  "linear-search": {
+    1: {
+      title: "What linear search does",
+      explanation:
+        "This function looks through a list for one number, called the **target**. It checks items from left to right. If it finds the target, it returns that item's **index**. If the target is not in the list, it returns `-1`.",
+      arguments: {
+        values: "The list of numbers to search, starting from the left.",
+        target: "The number we want to find.",
+      },
+    },
+    2: {
+      title: "Look at one index at a time",
+      explanation:
+        "Start at index `0`, the first item. After each check, move one step right with `index += 1`. Stop when `index` reaches `values.length`, because that means every item has already been checked.",
+    },
+    3: {
+      title: "Ask: is this the target?",
+      explanation:
+        "Read the number at this index and compare it with the target. If they are equal, we found it. If not, this item is not the answer, so the loop will try the next index.\n\nIn this lesson the list is `[8, 3, 11, 6, 2]`. The first search looks for `6`; the second looks for `4`.",
+      question: "If this number equals the target, what should the function do?",
+      choices: [
+        "Stop searching and return this index.",
+        "Keep scanning to see if the number appears again later.",
+        "Sort the list and start a binary search.",
+      ],
+      answer: 0,
+      solution:
+        "A match means we have found the target. Linear search returns that index immediately and does not look at the rest of the list.",
+    },
+    4: {
+      title: "Return where it was found",
+      explanation:
+        "The answer is the **index**, not the number itself. The caller already knows the target value; they need its position. Finding `6` at index `3` means `values[3]` is `6`.",
+      question: "Why return `index` instead of `target`?",
+      choices: [
+        "The caller already knows the target. The useful result is where it sits in the list.",
+        "The index is always smaller, so it is faster to return.",
+        "Returning the target proves the search sorted the list.",
+      ],
+      answer: 0,
+      solution:
+        "The target is the input we already had. The new information is its position, so the function returns the index.",
+    },
+    8: {
+      title: "Report that it was not found",
+      explanation:
+        "If the loop finishes, every item was checked and none matched. `-1` means \"not in the list\". We cannot return `0` for a miss, because `0` already means \"found at the first item\". The second search looks for `4`, which is missing, so this line runs.",
+      question: "Why return `-1` instead of `0` when the target is missing?",
+      choices: [
+        "`0` already means \"found at the first item\", so `-1` is reserved for \"not found\".",
+        "Negative numbers search faster than zero.",
+        "`-1` sorts the list into reverse order.",
+      ],
+      answer: 0,
+      solution:
+        "Index `0` is a real position. Returning `0` for a miss would look like a successful find at the start. `-1` cannot be a valid index, so it clearly means \"not found\".",
+    },
+    11: {
+      title: "Make a small example list",
+      explanation:
+        "These five numbers are intentionally out of order. That is why we cannot jump to the middle. We have to check them in order: `8`, then `3`, then `11`, then `6`, then `2`.",
+    },
+    12: {
+      title: "First search: a number that is in the list",
+      explanation:
+        "Find `6` in the list. The search will skip `8`, `3`, and `11`, then match `6` at index `3` and stop. Watch the `index` variable as you step.",
+    },
+    13: {
+      title: "Second search: a number that is missing",
+      explanation:
+        "Now search for `4`, which is not in the list. This time the loop checks every item and then returns `-1`. Comparing the two searches shows both outcomes of linear search.",
+    },
+    14: {
+      title: "Print the successful result",
+      explanation:
+        "This should print `3`, because `6` is the fourth number in the list. Indexes start at `0`, so the fourth item is index `3`.",
+    },
+    15: {
+      title: "Print the missing result",
+      explanation:
+        "This should print `-1`, confirming that `4` was not in the list.",
+    },
+  },
   "binary-search": notes({
     1: ["Define binary search", "This function exploits sorted order to discard half the remaining range each iteration."],
     2: ["Set the lower bound", "The candidate search interval initially begins at the first array index."],

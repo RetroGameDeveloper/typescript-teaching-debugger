@@ -169,8 +169,12 @@ function multipleChoiceAssessment(note: TeachingNote, line: number): TeachingNot
   };
 }
 
+function jsdocTextLines(text: string): string[] {
+  return text.split("\n").map((line) => (line.trim() === "" ? " *" : ` * ${line}`));
+}
+
 function commentBody(note: TeachingNote, indentation: string): string[] {
-  const lines = ["/**", ` * ## ${note.title}`, ` * ${note.explanation}`];
+  const lines = ["/**", ` * ## ${note.title}`, ...jsdocTextLines(note.explanation)];
 
   if (note.arguments && Object.keys(note.arguments).length > 0) {
     lines.push(" *", " * ### Arguments");
@@ -183,7 +187,7 @@ function commentBody(note: TeachingNote, indentation: string): string[] {
     lines.push(
       " *",
       " * ### Question",
-      ` * ${note.question}`,
+      ...jsdocTextLines(note.question),
     );
     if (note.choices && note.choices.length > 0) {
       lines.push(" *", " * ### Choices");
@@ -193,7 +197,7 @@ function commentBody(note: TeachingNote, indentation: string): string[] {
       lines.push(" *", " * ### Answer", ` * ${note.answer + 1}`);
     }
     if (note.solution) {
-      lines.push(" *", " * ### Solution", ` * ${note.solution}`);
+      lines.push(" *", " * ### Solution", ...jsdocTextLines(note.solution));
     }
   }
 
