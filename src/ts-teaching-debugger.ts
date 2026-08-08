@@ -222,9 +222,20 @@ function renderMarkdown(target: HTMLElement, markdown: string): void {
       continue;
     }
 
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading?.[1] && heading[2]) {
+      list = undefined;
+      const headingElement = document.createElement("h3");
+      headingElement.className =
+        `markdown-heading markdown-heading-${heading[1].length}`;
+      appendInlineMarkdown(headingElement, heading[2]);
+      target.append(headingElement);
+      continue;
+    }
+
     list = undefined;
     const paragraph = document.createElement("p");
-    appendInlineMarkdown(paragraph, line.replace(/^#{1,6}\s+/, ""));
+    appendInlineMarkdown(paragraph, line);
     target.append(paragraph);
   }
 }
