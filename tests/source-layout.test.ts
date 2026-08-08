@@ -12,12 +12,30 @@ describe("example source layout", () => {
       const firstFunction = body.findIndex(
         (node) => node.type === "FunctionDeclaration",
       );
+      let lastFunction = -1;
+      body.forEach((node, index) => {
+        if (node.type === "FunctionDeclaration") lastFunction = index;
+      });
+      const reportIndexes = body.flatMap((node, index) => {
+        if (node.type !== "ExpressionStatement" || node.expression.type !== "CallExpression") {
+          return [];
+        }
+        const callee = node.expression.callee;
+        return callee.type === "MemberExpression" &&
+          !callee.computed &&
+          callee.object.type === "Identifier" &&
+          callee.object.name === "console" &&
+          callee.property.type === "Identifier" &&
+          callee.property.name === "log"
+          ? [index]
+          : [];
+      });
 
       expect(example.code.startsWith("/**\n * # Problem")).toBe(true);
+      expect(example.code).toContain(" * ## How it works");
       expect(firstFunction).toBeGreaterThan(0);
-      expect(body.slice(firstFunction).every((node) => node.type === "FunctionDeclaration")).toBe(
-        true,
-      );
+      expect(reportIndexes.length).toBeGreaterThan(0);
+      expect(reportIndexes.every((index) => index > lastFunction)).toBe(true);
       expect(
         body.slice(0, firstFunction).some((node) => !node.type.startsWith("TS")),
       ).toBe(true);
