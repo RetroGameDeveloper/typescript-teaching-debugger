@@ -26,8 +26,9 @@ import {
   setEditorCode,
 } from "./editor";
 import { debuggerStyles } from "./styles";
+import type { TeachingNotes } from "./teaching";
 
-const teachingNotes: Record<string, string> = {
+const runtimeTeachingNotes: Record<string, string> = {
   ArrowFunctionExpression:
     "Execution has entered the arrow function. Its expression becomes the function's return value.",
   AssignmentExpression:
@@ -84,7 +85,7 @@ const componentTemplate = `
       </section>
       <aside class="sidebar" aria-label="Debugger details">
         <div class="teaching-card">
-          <p class="teaching-kicker">Why this paused</p>
+          <p class="teaching-kicker">Why this line exists</p>
           <p class="teaching-title">Ready to run</p>
           <p class="teaching-copy">Execution pauses before each executable AST node. Type-only syntax is parsed but skipped at runtime.</p>
           <span class="ast-token">Program</span>
@@ -185,6 +186,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   private resetSequence = 0;
   private snapshot: DebuggerSnapshot = { status: "ready" };
   private suppressEditorChange = false;
+  private _teachingNotes: TeachingNotes = {};
 
   get code(): string {
     return this.editor?.state.doc.toString() ?? this._code;
@@ -216,6 +218,17 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     }
 
     this.renderBreakpoints();
+  }
+
+  get teachingNotes(): TeachingNotes {
+    return this._teachingNotes;
+  }
+
+  set teachingNotes(notes: TeachingNotes) {
+    this._teachingNotes = notes ?? {};
+    if (this.shadowRoot) {
+      this.renderTeachingCard();
+    }
   }
 
   connectedCallback(): void {
@@ -434,6 +447,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this._code = source;
 
     if (!this.suppressEditorChange) {
+      this._teachingNotes = {};
       this.engine?.requestPause();
       this.scheduleReset(450);
       this.dispatchEvent(
@@ -580,9 +594,11 @@ export class TsTeachingDebuggerElement extends HTMLElement {
       return;
     }
 
-    title.textContent = point.label;
+    const lessonNote = this._teachingNotes[point.range.startLine];
+    title.textContent = lessonNote?.title ?? point.label;
     copy.textContent =
-      teachingNotes[point.nodeType] ??
+      lessonNote?.explanation ??
+      runtimeTeachingNotes[point.nodeType] ??
       "This is the next executable syntax node in the current control-flow path.";
     token.textContent = `${point.nodeType} - ${point.range.startLine}:${point.range.startColumn + 1}`;
   }
@@ -791,6 +807,8 @@ declare global {
 if (!customElements.get("ts-teaching-debugger")) {
   customElements.define("ts-teaching-debugger", TsTeachingDebuggerElement);
 }
+
+export type { TeachingNote, TeachingNotes } from "./teaching";
 
 export type {
   ConsoleEntry,
