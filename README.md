@@ -6,6 +6,7 @@ An embeddable custom element that teaches synchronous TypeScript execution using
 
 * Step into, step over, step out, resume, pause, and restart
 * Executable AST-node and source-line highlighting
+* Focus dimming around the active runtime or guided line
 * Editable TypeScript with clickable gutter breakpoints
 * Live local, block, and module scopes
 * Call-stack frames with source locations
@@ -19,6 +20,7 @@ An embeddable custom element that teaches synchronous TypeScript execution using
 * Automatic restart after a completed run
 * Guided walkthrough by default, with anchored Markdown dialogs
 * Individually collapsible teaching comments, collapsed by default
+* Context-sensitive runtime and guided controls in the right sidebar
 
 ## Included lessons
 
@@ -112,7 +114,7 @@ uses it for the "Why this line exists" panel:
  * This checks whether the current array element is the value being sought.
  *
  * ### Question
- * Based on the explanation above, what happens when the values match?
+ * Using what you have learned so far, what happens when the values match?
  *
  * ### Choices
  * * The function returns the current index.
@@ -161,8 +163,9 @@ teaching panel, guided dialog, and hovers while collapsed.
 
 Questions use multiple-choice options. `### Choices` contains the options and
 `### Answer` contains the one-based number of the correct option. Generated
-lesson checks ask learners to identify the behavior described immediately above
-the question, rather than requiring knowledge that has not been introduced.
+lesson checks ask learners to predict the next behavior using concepts introduced
+so far. Guided steps present the question first and reveal the explanation after
+the learner checks an answer.
 
 Hovering an identifier reads its value from the nearest active scope. If its
 declaration has a Markdown JSDoc teaching block, the same documentation is shown
@@ -179,7 +182,14 @@ lessons begin with their `# Problem` block, which explains the idea with a simpl
 analogy before any code-specific steps. The dialog
 includes Markdown documentation, multiple-choice checks, answer feedback, and
 solution explanations. Code outside the current guided line is dimmed to keep
-the active teaching step visually focused. Finish closes the walkthrough.
+the active teaching step visually focused. The right teaching panel follows the
+same guided step and provides a second set of Previous and Next controls. Finish
+closes the walkthrough.
+
+When Guided mode is active, the right sidebar shows guided navigation instead of
+runtime execution controls. Exiting Guided mode restores resume, step over, step
+into, step out, and restart controls. Paused runtime execution also dims lines
+outside the current source line.
 
 By default, steps follow all Markdown teaching blocks in source order.
 Set `guidedSteps` to source line numbers when a lesson needs a custom route:
