@@ -416,16 +416,33 @@ const guidedRangeState = StateField.define<DecorationSet>({
         continue;
       }
 
-      next = Decoration.set(
-        [
-          Decoration.line({ class: "cm-guided-line" }).range(effect.value.lineFrom),
-          Decoration.mark({ class: "cm-guided-code" }).range(
-            effect.value.from,
-            effect.value.to,
+      const ranges: Range<Decoration>[] = [
+        Decoration.line({ class: "cm-guided-line" }).range(effect.value.lineFrom),
+        Decoration.mark({ class: "cm-guided-code" }).range(
+          effect.value.from,
+          effect.value.to,
+        ),
+      ];
+
+      if (effect.value.lineFrom > 0) {
+        ranges.push(
+          Decoration.mark({ class: "cm-guided-dim" }).range(
+            0,
+            effect.value.lineFrom,
           ),
-        ],
-        true,
-      );
+        );
+      }
+
+      if (effect.value.to < transaction.state.doc.length) {
+        ranges.push(
+          Decoration.mark({ class: "cm-guided-dim" }).range(
+            effect.value.to,
+            transaction.state.doc.length,
+          ),
+        );
+      }
+
+      next = Decoration.set(ranges, true);
     }
 
     return next;
@@ -601,6 +618,10 @@ export function createEditor({
           ".cm-guided-code": {
             backgroundColor: "rgba(197, 138, 249, 0.18)",
             borderBottom: "1px solid rgba(197, 138, 249, 0.78)",
+          },
+          ".cm-guided-dim": {
+            filter: "grayscale(1)",
+            opacity: "0.3",
           },
           ".cm-comment-heading": {
             color: "#e8eaed",
