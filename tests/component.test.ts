@@ -3,7 +3,7 @@ import {
   TsTeachingDebuggerElement,
 } from "../src/ts-teaching-debugger";
 import { algorithmExamples } from "../src/examples";
-import { annotateCode } from "../src/teaching";
+import { annotateCode, parseTeachingComments } from "../src/teaching";
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -104,25 +104,35 @@ console.log(answer);`;
     ).toBe("paused");
   });
 
-  it("dims unfocused code and shows runtime controls while normally paused", async () => {
+  it("dims the selected lesson step and then the runtime pause", async () => {
+    const annotated = annotateCode(
+      "const first = 1;\nconst second = first + 1;",
+      {
+        1: { title: "Create the first value", explanation: "Stores `1`." },
+        2: { title: "Create the second value", explanation: "Adds one more." },
+      },
+    );
     const element = document.createElement(
       "ts-teaching-debugger",
     ) as TsTeachingDebuggerElement;
-    element.guidedMode = false;
-    element.code = "const first = 1;\nconst second = first + 1;";
+    element.code = annotated.code;
     document.body.append(element);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(element.shadowRoot?.querySelector(".cm-debug-dim")).not.toBeNull();
-    expect(element.shadowRoot?.querySelector(".cm-guided-dim")).toBeNull();
+    expect(element.shadowRoot?.querySelector(".cm-guided-dim")).not.toBeNull();
     expect(
       element.shadowRoot?.querySelector(".runtime-sidebar-controls")?.hasAttribute("hidden"),
     ).toBe(false);
     expect(
       element.shadowRoot?.querySelector(".guided-sidebar-controls")?.hasAttribute("hidden"),
-    ).toBe(true);
+    ).toBe(false);
     expect(element.shadowRoot?.querySelector('.sidebar [data-command="into"]')).not.toBeNull();
+
+    await element.resume();
+
+    expect(element.shadowRoot?.querySelector(".cm-debug-dim")).not.toBeNull();
+    expect(element.shadowRoot?.querySelector(".cm-guided-dim")).toBeNull();
   });
 
   it("starts an algorithm lesson with its beginner problem introduction", async () => {
@@ -138,15 +148,57 @@ console.log(answer);`;
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(element.shadowRoot?.querySelector(".guided-title")?.textContent).toBe(
+    expect(element.shadowRoot?.querySelector(".teaching-title")?.textContent).toBe(
       "Problem",
     );
     expect(
-      element.shadowRoot?.querySelector(".guided-documentation strong")?.textContent,
+      element.shadowRoot?.querySelector(".teaching-copy strong")?.textContent,
     ).toBe("Linear search");
+    expect(element.shadowRoot?.querySelector(".guided-overlay")).toBeNull();
+    expect(element.shadowRoot?.querySelector(".ast-token")).toBeNull();
+    const lessonLines = parseTeachingComments(linearSearch?.code ?? "")
+      .map((comment) => comment.line)
+      .filter((line) => !(linearSearch?.code.split("\n")[line - 1] ?? "").trimStart().startsWith("/**"));
+    expect(lessonLines.every((line) => element.breakpoints.includes(line))).toBe(true);
+
+    await element.reset();
+    expect(element.shadowRoot?.querySelector(".teaching-title")?.textContent).toBe(
+      "Problem",
+    );
   });
 
-  it("navigates an optional guided walkthrough in both directions", async () => {
+  it("omits current values for functions but keeps them for variables", async () => {
+    const annotated = annotateCode(
+      "const input = 2;\nfunction double(value: number): number {\n  return value * 2;\n}",
+      {
+        1: { title: "Example input", explanation: "Stores the input value." },
+        2: { title: "Double a number", explanation: "Returns twice the input." },
+      },
+    );
+    const element = document.createElement(
+      "ts-teaching-debugger",
+    ) as TsTeachingDebuggerElement;
+    element.code = annotated.code;
+    document.body.append(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await element.stepInto();
+
+    const internal = element as unknown as {
+      createIdentifierHover(identifier: string, position: number): HTMLElement | undefined;
+    };
+    const functionPosition = annotated.code.indexOf("double");
+    const variablePosition = annotated.code.indexOf("input");
+    const functionHover = internal.createIdentifierHover("double", functionPosition);
+    const variableHover = internal.createIdentifierHover("input", variablePosition);
+
+    expect(functionHover?.querySelector(".hover-documentation")).not.toBeNull();
+    expect(functionHover?.querySelector(".hover-label")).toBeNull();
+    expect(variableHover?.querySelector(".hover-label")?.textContent).toBe(
+      "Current value",
+    );
+  });
+
+  it("navigates the lesson in the right panel in both directions", async () => {
     const annotated = annotateCode(
       "const first = 1;\nconst second = first + 1;",
       {
@@ -169,13 +221,7 @@ console.log(answer);`;
     document.body.append(element);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
-    const title = element.shadowRoot?.querySelector(".guided-title");
-    const previous = element.shadowRoot?.querySelector<HTMLButtonElement>(
-      ".guided-previous",
-    );
-    const next = element.shadowRoot?.querySelector<HTMLButtonElement>(
-      ".guided-next",
-    );
+    const title = element.shadowRoot?.querySelector(".teaching-title");
     const sidebarNext = element.shadowRoot?.querySelector<HTMLButtonElement>(
       ".sidebar-guided-next",
     );
@@ -183,59 +229,31 @@ console.log(answer);`;
       ".sidebar-guided-previous",
     );
 
-    expect(element.shadowRoot?.querySelector(".guided-overlay")?.hasAttribute("hidden")).toBe(
-      false,
-    );
-    expect(element.guidedMode).toBe(true);
     expect(element.shadowRoot?.querySelector(".cm-guided-dim")).not.toBeNull();
     expect(
       element.shadowRoot?.querySelector(".runtime-sidebar-controls")?.hasAttribute("hidden"),
-    ).toBe(true);
-    expect(
-      element.shadowRoot?.querySelector(".guided-sidebar-controls")?.hasAttribute("hidden"),
     ).toBe(false);
     expect(title?.textContent).toBe("Create the first value");
-    expect(element.shadowRoot?.querySelector(".teaching-title")?.textContent).toBe(
-      "Create the first value",
-    );
-    expect(previous?.disabled).toBe(true);
-    expect(element.shadowRoot?.querySelector(".guided-question")?.hasAttribute("hidden")).toBe(
+    expect(sidebarPrevious?.disabled).toBe(true);
+    expect(element.shadowRoot?.querySelector(".teaching-question")?.hasAttribute("hidden")).toBe(
       false,
     );
     expect(
-      element.shadowRoot?.querySelectorAll(".guided-question .choice-option"),
+      element.shadowRoot?.querySelectorAll(".teaching-question .choice-option"),
     ).toHaveLength(3);
-    const guidedQuestion = element.shadowRoot?.querySelector(".guided-question");
-    const guidedDocumentation = element.shadowRoot?.querySelector(
-      ".guided-documentation",
-    );
-    const questionBeforeDocumentation =
-      guidedQuestion && guidedDocumentation
-        ? guidedQuestion.compareDocumentPosition(guidedDocumentation)
-        : 0;
-    expect(
-      Boolean(questionBeforeDocumentation & Node.DOCUMENT_POSITION_FOLLOWING),
-    ).toBe(true);
-    expect(guidedDocumentation?.hasAttribute("hidden")).toBe(true);
     element.shadowRoot
-      ?.querySelector<HTMLButtonElement>(".guided-question .choice-option")
+      ?.querySelector<HTMLButtonElement>(".teaching-question .choice-option")
       ?.click();
     element.shadowRoot
-      ?.querySelector<HTMLButtonElement>(".guided-solution-toggle")
+      ?.querySelector<HTMLButtonElement>(".solution-toggle")
       ?.click();
-    expect(
-      element.shadowRoot?.querySelector(".guided-solution")?.hasAttribute("hidden"),
-    ).toBe(false);
     expect(
       element.shadowRoot?.querySelector(".teaching-solution")?.hasAttribute("hidden"),
     ).toBe(false);
 
     sidebarNext?.click();
     expect(title?.textContent).toBe("Derive the second value");
-    expect(next?.textContent).toBe("Finish");
-    expect(element.shadowRoot?.querySelector(".teaching-title")?.textContent).toBe(
-      "Derive the second value",
-    );
+    expect(sidebarNext?.textContent).toBe("Finish");
     sidebarPrevious?.click();
     expect(title?.textContent).toBe("Create the first value");
   });
