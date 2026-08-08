@@ -101,7 +101,6 @@ Properties:
 * `autoResetDelay: number` - milliseconds before reset; use `-1` to disable
 * `guidedMode: boolean` - enabled by default
 * `guidedSteps: number[]`
-* `showComments: boolean`
 
 Place a Markdown JSDoc block immediately above an executable line. The debugger
 uses it for the "Why this line exists" panel:
@@ -113,7 +112,15 @@ uses it for the "Why this line exists" panel:
  * This checks whether the current array element is the value being sought.
  *
  * ### Question
- * What happens when `values[index]` equals `target`?
+ * Based on the explanation above, what happens when the values match?
+ *
+ * ### Choices
+ * * The function returns the current index.
+ * * The search restarts from the beginning.
+ * * The array is sorted before searching again.
+ *
+ * ### Answer
+ * 1
  *
  * ### Solution
  * The function returns the current index and ends the search.
@@ -148,11 +155,14 @@ from the current editor source after edits, rather than held in separate lesson
 metadata.
 
 Teaching comments begin as compact collapsed rows and can be expanded
-individually. The Comments toolbar control expands or collapses every block.
-When expanded, headings, bold text, and inline code receive readable Markdown
-styling in the editor. Full content remains available to the teaching panel,
-guided dialog, and hovers while collapsed. Questions are always enabled whenever
-a teaching block defines one.
+individually. When expanded, headings, bold text, and inline code receive
+readable Markdown styling in the editor. Full content remains available to the
+teaching panel, guided dialog, and hovers while collapsed.
+
+Questions use multiple-choice options. `### Choices` contains the options and
+`### Answer` contains the one-based number of the correct option. Generated
+lesson checks ask learners to identify the behavior described immediately above
+the question, rather than requiring knowledge that has not been introduced.
 
 Hovering an identifier reads its value from the nearest active scope. If its
 declaration has a Markdown JSDoc teaching block, the same documentation is shown
@@ -167,8 +177,9 @@ selected code. Previous and Next navigate the
 ordered teaching blocks without executing or mutating program state. Algorithm
 lessons begin with their `# Problem` block, which explains the idea with a simple
 analogy before any code-specific steps. The dialog
-includes Markdown documentation, optional questions, answer input, and solution
-reveal. Finish closes the walkthrough.
+includes Markdown documentation, multiple-choice checks, answer feedback, and
+solution explanations. Code outside the current guided line is dimmed to keep
+the active teaching step visually focused. Finish closes the walkthrough.
 
 By default, steps follow all Markdown teaching blocks in source order.
 Set `guidedSteps` to source line numbers when a lesson needs a custom route:
