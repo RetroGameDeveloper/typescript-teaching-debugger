@@ -18,9 +18,9 @@ An embeddable custom element that teaches synchronous TypeScript execution using
 * Curriculum groups ordered from fundamentals through compiler algorithms
 * Live variable-value and Markdown documentation hovers
 * Automatic restart after a completed run
-* Guided walkthrough by default, with anchored Markdown dialogs
+* Unified lesson walkthrough in the right teaching panel
 * Individually collapsible teaching comments, collapsed by default
-* Context-sensitive runtime and guided controls in the right sidebar
+* Runtime and lesson navigation controls in the right sidebar
 
 ## Included lessons
 
@@ -99,10 +99,8 @@ ts-teaching-debugger {
 Properties:
 
 * `code: string`
-* `breakpoints: number[]`
+* `breakpoints: number[]` - includes automatic lesson-step breakpoints
 * `autoResetDelay: number` - milliseconds before reset; use `-1` to disable
-* `guidedMode: boolean` - enabled by default
-* `guidedSteps: number[]`
 
 Place a Markdown JSDoc block immediately above an executable line. The debugger
 uses it for the "Why this line exists" panel:
@@ -159,45 +157,31 @@ metadata.
 Teaching comments begin as compact collapsed rows and can be expanded
 individually. When expanded, headings, bold text, and inline code receive
 readable Markdown styling in the editor. Full content remains available to the
-teaching panel, guided dialog, and hovers while collapsed.
+teaching panel and hovers while collapsed.
 
 Questions use multiple-choice options. `### Choices` contains the options and
 `### Answer` contains the one-based number of the correct option. Generated
 lesson checks ask learners to predict the next behavior using concepts introduced
-so far. Guided steps present the question first and reveal the explanation after
+so far. Lesson steps present the question first and reveal the explanation after
 the learner checks an answer.
 
 Hovering an identifier reads its value from the nearest active scope. If its
 declaration has a Markdown JSDoc teaching block, the same documentation is shown
 in the hover card even while comments are hidden. Function declaration blocks
-act as rendered function docstrings.
+act as rendered function docstrings. Function hovers omit the redundant current
+value preview; variable and parameter hovers retain it.
 
-## Guided walkthrough
+## Lesson flow
 
-Guided mode starts enabled. Set `guidedMode` to `false`, or use the Guided toolbar
-toggle, to close it. The large walkthrough dialog is anchored above or below the
-selected code. Previous and Next navigate the
-ordered teaching blocks without executing or mutating program state. Algorithm
-lessons begin with their `# Problem` block, which explains the idea with a simple
-analogy before any code-specific steps. The dialog
-includes Markdown documentation, multiple-choice checks, answer feedback, and
-solution explanations. Code outside the current guided line is dimmed to keep
-the active teaching step visually focused. The right teaching panel follows the
-same guided step and provides a second set of Previous and Next controls. Finish
-closes the walkthrough.
+The initial and reset state displays the first `# Problem` block in the right
+teaching panel. Previous and Next navigate all Markdown teaching blocks without
+executing or mutating program state. The selected source line is focused and
+other lines are dimmed.
 
-When Guided mode is active, the right sidebar shows guided navigation instead of
-runtime execution controls. Exiting Guided mode restores resume, step over, step
-into, step out, and restart controls. Paused runtime execution also dims lines
-outside the current source line.
-
-By default, steps follow all Markdown teaching blocks in source order.
-Set `guidedSteps` to source line numbers when a lesson needs a custom route:
-
-```ts
-teachingDebugger.guidedSteps = [12, 24, 37];
-teachingDebugger.guidedMode = true;
-```
+Executable teaching steps are also installed as automatic breakpoints. Resume
+or stepping executes the program, pauses at those lesson lines, and synchronizes
+the same right panel to the reached step. Runtime controls and lesson navigation
+therefore operate together without a separate guided mode or dialog.
 
 Methods:
 
