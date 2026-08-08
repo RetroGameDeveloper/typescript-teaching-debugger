@@ -1,10 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import { DebuggerEngine } from "../src/core/engine";
 import { algorithmExamples } from "../src/examples";
-import { teachingNotesFromComments } from "../src/teaching";
+import { parseTeachingComments, teachingNotesFromComments } from "../src/teaching";
 
 describe("algorithm examples", () => {
   for (const example of algorithmExamples) {
+    it(`introduces ${example.title} before its guided code steps`, () => {
+      const comments = parseTeachingComments(example.code);
+
+      expect(comments[0]?.title).toBe("Problem");
+      expect(comments[0]?.explanation).toContain("## How it works");
+      expect(comments[0]?.explanation.length).toBeGreaterThan(180);
+    });
+
     it(`executes ${example.title} to completion`, async () => {
       const onConsole = vi.fn();
       const engine = new DebuggerEngine(example.code, { onConsole });
