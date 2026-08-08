@@ -338,25 +338,6 @@ export const debuggerStyles: string = `
     padding-top: 12px;
   }
 
-  .guided-response {
-    background: #202124;
-    border: 1px solid var(--debug-border);
-    border-radius: 5px;
-    color: var(--debug-text);
-    display: block;
-    font: 11px/1.5 var(--debug-mono);
-    margin-top: 9px;
-    min-height: 68px;
-    padding: 8px;
-    resize: vertical;
-    width: 100%;
-  }
-
-  .guided-response:focus {
-    border-color: #c58af9;
-    outline: 2px solid rgba(197, 138, 249, 0.13);
-  }
-
   .guided-solution-toggle {
     background: rgba(197, 138, 249, 0.1);
     border: 1px solid rgba(197, 138, 249, 0.32);
@@ -368,11 +349,28 @@ export const debuggerStyles: string = `
     padding: 7px 9px;
   }
 
+  .guided-solution-toggle:disabled,
+  .solution-toggle:disabled {
+    cursor: default;
+    opacity: 0.42;
+  }
+
   .guided-solution {
     background: rgba(129, 201, 149, 0.07);
     border-left: 2px solid var(--debug-green);
     margin-top: 10px;
     padding: 9px 10px;
+  }
+
+  .guided-solution[data-result="incorrect"],
+  .teaching-solution[data-result="incorrect"] {
+    background: rgba(242, 139, 130, 0.07);
+    border-left-color: #f28b82;
+  }
+
+  .guided-solution[data-result="incorrect"] .solution-label,
+  .teaching-solution[data-result="incorrect"] .solution-label {
+    color: #f28b82;
   }
 
   .guided-footer {
@@ -488,23 +486,77 @@ export const debuggerStyles: string = `
     line-height: 1.5;
   }
 
-  .question-response {
-    background: rgba(32, 33, 36, 0.78);
+  .question-choices,
+  .guided-question-choices {
+    display: grid;
+    gap: 6px;
+    margin-top: 9px;
+  }
+
+  .choice-option {
+    align-items: flex-start;
+    background: rgba(32, 33, 36, 0.56);
     border: 1px solid var(--debug-border);
-    border-radius: 4px;
+    border-radius: 5px;
     color: var(--debug-text);
-    display: block;
+    cursor: pointer;
+    display: flex;
     font: 10px/1.45 var(--debug-mono);
-    margin-top: 8px;
-    min-height: 48px;
-    padding: 6px 7px;
-    resize: vertical;
+    gap: 8px;
+    padding: 7px 8px;
+    text-align: left;
     width: 100%;
   }
 
-  .question-response:focus {
-    border-color: var(--debug-blue-strong);
-    outline: none;
+  .choice-option:hover:not(:disabled),
+  .choice-option[data-selected="true"] {
+    background: rgba(138, 180, 248, 0.12);
+    border-color: rgba(138, 180, 248, 0.5);
+  }
+
+  .guided-question .choice-option:hover:not(:disabled),
+  .guided-question .choice-option[data-selected="true"] {
+    background: rgba(197, 138, 249, 0.12);
+    border-color: rgba(197, 138, 249, 0.5);
+  }
+
+  .choice-option[data-result="correct"] {
+    background: rgba(129, 201, 149, 0.1);
+    border-color: rgba(129, 201, 149, 0.62);
+  }
+
+  .choice-option[data-result="incorrect"] {
+    background: rgba(242, 139, 130, 0.09);
+    border-color: rgba(242, 139, 130, 0.56);
+  }
+
+  .choice-option:focus-visible {
+    outline: 2px solid rgba(138, 180, 248, 0.5);
+    outline-offset: 1px;
+  }
+
+  .choice-marker {
+    align-items: center;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    color: var(--debug-blue);
+    display: inline-flex;
+    flex: 0 0 18px;
+    font-size: 9px;
+    height: 18px;
+    justify-content: center;
+  }
+
+  .guided-question .choice-marker {
+    color: #d7aefb;
+  }
+
+  .choice-copy {
+    min-width: 0;
+  }
+
+  .choice-copy p {
+    margin: 0;
   }
 
   .solution-toggle {
