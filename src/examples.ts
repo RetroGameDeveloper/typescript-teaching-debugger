@@ -17,7 +17,7 @@ export interface AlgorithmExample {
   title: string;
 }
 
-export const algorithmExamples: AlgorithmExample[] = [
+const sourceAlgorithmExamples: AlgorithmExample[] = [
   {
     id: "cfg-reverse-postorder",
     title: "CFG reverse postorder",
@@ -746,3 +746,31 @@ const result = fibonacci(10);
 console.log("Sequence:", result);`,
   },
 ];
+
+export const algorithmExamples: AlgorithmExample[] = sourceAlgorithmExamples.map(
+  (example) => {
+    const sourceNotes = teachingNotesByExample[example.id] ?? {};
+    const noteLines = Object.keys(sourceNotes).map(Number).sort((left, right) => left - right);
+    const questionLines = example.breakpoints.map(
+      (line) =>
+        sourceNotes[line]
+          ? line
+          : noteLines.find((noteLine) => noteLine >= line) ?? line,
+    );
+    const annotated = annotateCode(
+      example.code,
+      sourceNotes,
+      questionLines,
+    );
+
+    return {
+      ...example,
+      breakpoints: questionLines.map(
+        (line) => annotated.lineMap[line] ?? line,
+      ),
+      code: annotated.code,
+    };
+  },
+);
+import { teachingNotesByExample } from "./example-notes";
+import { annotateCode } from "./teaching";
