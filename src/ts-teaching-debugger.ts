@@ -29,9 +29,11 @@ import {
 import { debuggerStyles } from "./styles";
 import {
   parseTeachingComments,
+  parseTeachingSymbols,
   teachingNotesFromComments,
   type TeachingNote,
   type TeachingNotes,
+  type TeachingSymbol,
 } from "./teaching";
 
 const runtimeTeachingNotes: Record<string, string> = {
@@ -226,6 +228,44 @@ function previewValue(value: unknown, consoleStyle = false): string {
   return constructorName && constructorName !== "Object" ? constructorName : "{...}";
 }
 
+function hoverValue(value: unknown): string {
+  if (typeof value === "function") return previewValue(value);
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "type" in value &&
+    (value as { type?: string }).type === "user-function"
+  ) {
+    return previewValue(value);
+  }
+
+  if (typeof value === "object" && value !== null) {
+    const seen = new WeakSet<object>();
+
+    try {
+      const serialized = JSON.stringify(
+        value,
+        (_key, nested) => {
+          if (typeof nested === "object" && nested !== null) {
+            if (seen.has(nested)) return "[Circular]";
+            seen.add(nested);
+          }
+          if (typeof nested === "function") return previewValue(nested);
+          return nested;
+        },
+        2,
+      );
+      return serialized && serialized.length > 800
+        ? `${serialized.slice(0, 797)}...`
+        : serialized ?? previewValue(value);
+    } catch {
+      return previewValue(value);
+    }
+  }
+
+  return previewValue(value);
+}
+
 function valueClass(value: unknown): string {
   if (value === null || value === undefined) return "value-nullish";
   if (typeof value === "string") return "value-string";
@@ -264,6 +304,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   private questionsVisible = true;
   private solutionVisible = false;
   private teachingLine?: number;
+  private teachingSymbols: TeachingSymbol[] = [];
 
   get code(): string {
     return this.editor?.state.doc.toString() ?? this._code;
@@ -336,6 +377,8 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this.addIcons();
     this.editor = createEditor({
       code: this._code,
+      createHover: (identifier, position) =>
+        this.createIdentifierHover(identifier, position),
       onBreakpointsChange: (lines) => this.handleBreakpointChange(lines),
       onChange: (source) => this.handleSourceChange(source),
       parent: this.requiredElement(".editor-host"),
@@ -572,7 +615,67 @@ export class TsTeachingDebuggerElement extends HTMLElement {
 
   private refreshTeachingComments(): void {
     this._teachingNotes = teachingNotesFromComments(this._code);
+    this.teachingSymbols = parseTeachingSymbols(this._code);
     this.applyCommentVisibility();
+  }
+
+  private createIdentifierHover(
+    identifier: string,
+    position: number,
+  ): HTMLElement | undefined {
+    let scopeEntry: ScopeEntry | undefined;
+
+    for (const scope of this.snapshot.point?.scopes ?? []) {
+      scopeEntry = scope.entries.find((entry) => entry.name === identifier);
+      if (scopeEntry) break;
+    }
+
+    const symbol = this.teachingSymbols
+      .filter((candidate) => candidate.name === identifier)
+      .sort(
+        (left, right) =>
+          Math.abs(left.position - position) - Math.abs(right.position - position),
+      )[0];
+
+    if (!scopeEntry && !symbol) return undefined;
+
+    const card = document.createElement("div");
+    card.className = "cm-tooltip-teaching";
+    const header = document.createElement("div");
+    header.className = "hover-header";
+    const name = document.createElement("code");
+    name.className = "hover-name";
+    name.textContent = identifier;
+    const kind = document.createElement("span");
+    kind.className = "hover-kind";
+    kind.textContent = symbol?.kind ?? scopeEntry?.kind ?? "variable";
+    header.append(name, kind);
+    card.append(header);
+
+    if (scopeEntry) {
+      const valueLabel = document.createElement("div");
+      valueLabel.className = "hover-label";
+      valueLabel.textContent = "Current value";
+      const value = document.createElement("pre");
+      value.className = "hover-value";
+      value.textContent = hoverValue(scopeEntry.value);
+      card.append(valueLabel, value);
+    }
+
+    if (symbol) {
+      const documentation = document.createElement("div");
+      documentation.className = "hover-documentation";
+      const documentationTitle = document.createElement("div");
+      documentationTitle.className = "hover-doc-title";
+      documentationTitle.textContent = symbol.note.title;
+      const documentationCopy = document.createElement("div");
+      documentationCopy.className = "hover-doc-copy";
+      renderMarkdown(documentationCopy, symbol.note.explanation);
+      documentation.append(documentationTitle, documentationCopy);
+      card.append(documentation);
+    }
+
+    return card;
   }
 
   private applyCommentVisibility(): void {
