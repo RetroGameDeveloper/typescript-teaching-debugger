@@ -38,6 +38,7 @@ interface BreakpointChange {
 interface ActiveRange {
   from: number;
   lineFrom: number;
+  lineTo: number;
   to: number;
 }
 
@@ -59,6 +60,7 @@ const activeRangeEffect = StateEffect.define<ActiveRange | null>({
       ? {
           from: mapping.mapPos(value.from),
           lineFrom: mapping.mapPos(value.lineFrom),
+          lineTo: mapping.mapPos(value.lineTo),
           to: mapping.mapPos(value.to),
         }
       : null,
@@ -70,6 +72,7 @@ const guidedRangeEffect = StateEffect.define<ActiveRange | null>({
       ? {
           from: mapping.mapPos(value.from),
           lineFrom: mapping.mapPos(value.lineFrom),
+          lineTo: mapping.mapPos(value.lineTo),
           to: mapping.mapPos(value.to),
         }
       : null,
@@ -200,6 +203,24 @@ const activeRangeState = StateField.define<DecorationSet>({
           Decoration.mark({ class: "cm-debug-node" }).range(
             effect.value.from,
             effect.value.to,
+          ),
+        );
+      }
+
+      if (effect.value.lineFrom > 0) {
+        ranges.push(
+          Decoration.mark({ class: "cm-debug-dim" }).range(
+            0,
+            effect.value.lineFrom,
+          ),
+        );
+      }
+
+      if (effect.value.lineTo < transaction.state.doc.length) {
+        ranges.push(
+          Decoration.mark({ class: "cm-debug-dim" }).range(
+            effect.value.lineTo,
+            transaction.state.doc.length,
           ),
         );
       }
@@ -433,10 +454,10 @@ const guidedRangeState = StateField.define<DecorationSet>({
         );
       }
 
-      if (effect.value.to < transaction.state.doc.length) {
+      if (effect.value.lineTo < transaction.state.doc.length) {
         ranges.push(
           Decoration.mark({ class: "cm-guided-dim" }).range(
-            effect.value.to,
+            effect.value.lineTo,
             transaction.state.doc.length,
           ),
         );
@@ -611,6 +632,10 @@ export function createEditor({
             backgroundColor: "rgba(138, 180, 248, 0.14)",
             borderBottom: "1px solid rgba(138, 180, 248, 0.72)",
           },
+          ".cm-debug-dim": {
+            filter: "grayscale(1)",
+            opacity: "0.3",
+          },
           ".cm-guided-line": {
             backgroundColor: "rgba(197, 138, 249, 0.09)",
             boxShadow: "inset 3px 0 0 #c58af9",
@@ -712,9 +737,9 @@ export function setActivePoint(
   const docLength = view.state.doc.length;
   const from = Math.min(Math.max(point.range.start, 0), docLength);
   const to = Math.min(Math.max(point.range.end, from), docLength);
-  const lineFrom = view.state.doc.lineAt(from).from;
+  const line = view.state.doc.lineAt(from);
   view.dispatch({
-    effects: activeRangeEffect.of({ from, lineFrom, to }),
+    effects: activeRangeEffect.of({ from, lineFrom: line.from, lineTo: line.to, to }),
     scrollIntoView: true,
     selection: { anchor: from },
   });
@@ -792,7 +817,12 @@ export function setGuidedLine(view: EditorView, lineNumber?: number): void {
   const contentOffset = line.text.search(/\S/);
   const from = contentOffset >= 0 ? line.from + contentOffset : line.from;
   view.dispatch({
-    effects: guidedRangeEffect.of({ from, lineFrom: line.from, to: line.to }),
+    effects: guidedRangeEffect.of({
+      from,
+      lineFrom: line.from,
+      lineTo: line.to,
+      to: line.to,
+    }),
     scrollIntoView: true,
     selection: { anchor: from },
   });
