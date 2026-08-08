@@ -314,6 +314,24 @@ export const debuggerStyles: string = `
     padding: 1px 4px;
   }
 
+  .markdown-heading {
+    color: var(--debug-text);
+    font: 600 12px/1.35 var(--debug-sans);
+    margin: 10px 0 4px;
+  }
+
+  .markdown-heading-1,
+  .markdown-heading-2 {
+    font-size: 14px;
+  }
+
+  .markdown-heading-3,
+  .markdown-heading-4 {
+    color: #d7b8ff;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+  }
+
   .guided-question {
     border-top: 1px solid rgba(197, 138, 249, 0.22);
     margin-top: 13px;
