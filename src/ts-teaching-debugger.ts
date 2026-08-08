@@ -25,6 +25,7 @@ import {
   setCommentVisibility,
   setEditorBreakpoints,
   setEditorCode,
+  setGuidedLine,
 } from "./editor";
 import { debuggerStyles } from "./styles";
 import {
@@ -33,6 +34,7 @@ import {
   teachingNotesFromComments,
   type TeachingNote,
   type TeachingNotes,
+  type TeachingComment,
   type TeachingSymbol,
 } from "./teaching";
 
@@ -88,11 +90,39 @@ const componentTemplate = `
       <span class="toolbar-separator" aria-hidden="true"></span>
       <button class="view-toggle" data-view="comments" type="button" aria-pressed="false">Comments</button>
       <button class="view-toggle" data-view="questions" type="button" aria-pressed="true">Questions</button>
+      <button class="view-toggle" data-view="guided" type="button" aria-pressed="false">Guided</button>
       <div class="pause-summary" data-status="ready">Ready to evaluate TypeScript</div>
     </div>
     <div class="workspace">
       <section class="editor-pane" aria-label="TypeScript source">
         <div class="editor-host"></div>
+        <div class="guided-overlay" hidden>
+          <section class="guided-dialog" role="dialog" aria-modal="false" aria-labelledby="guided-title">
+            <header class="guided-header">
+              <span class="guided-kicker">Guided walkthrough</span>
+              <span class="guided-progress"></span>
+              <button class="guided-close" type="button" aria-label="Close guided walkthrough">x</button>
+            </header>
+            <div class="guided-body">
+              <h2 class="guided-title" id="guided-title"></h2>
+              <div class="guided-documentation"></div>
+              <div class="guided-question" hidden>
+                <p class="question-label">Question</p>
+                <div class="guided-question-prompt"></div>
+                <textarea class="guided-response" rows="3" aria-label="Your guided answer" placeholder="Write your answer before revealing the solution"></textarea>
+                <button class="guided-solution-toggle" type="button">Reveal solution</button>
+                <div class="guided-solution" hidden>
+                  <p class="solution-label">Solution</p>
+                  <div class="guided-solution-copy"></div>
+                </div>
+              </div>
+            </div>
+            <footer class="guided-footer">
+              <button class="guided-previous" type="button">Previous</button>
+              <button class="guided-next" type="button">Next</button>
+            </footer>
+          </section>
+        </div>
       </section>
       <aside class="sidebar" aria-label="Debugger details">
         <div class="teaching-card">
@@ -307,6 +337,11 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   private solutionVisible = false;
   private teachingLine?: number;
   private teachingSymbols: TeachingSymbol[] = [];
+  private guidedComments: TeachingComment[] = [];
+  private guidedEnabled = false;
+  private guidedIndex = 0;
+  private guidedSolutionVisible = false;
+  private _guidedSteps: number[] = [];
 
   get code(): string {
     return this.editor?.state.doc.toString() ?? this._code;
@@ -324,6 +359,8 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this._code = value ?? "";
 
     if (this.editor) {
+      this.guidedIndex = 0;
+      this.guidedSolutionVisible = false;
       this.suppressEditorChange = true;
       setEditorCode(this.editor, this._code);
       this.suppressEditorChange = false;
@@ -368,8 +405,38 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     this.solutionVisible = false;
     if (this.shadowRoot) {
       this.renderTeachingCard();
+      this.renderGuidedDialog();
     }
     this.renderViewToggles();
+  }
+
+  get guidedMode(): boolean {
+    return this.guidedEnabled;
+  }
+
+  set guidedMode(enabled: boolean) {
+    this.guidedEnabled = Boolean(enabled);
+    this.guidedIndex = 0;
+    this.guidedSolutionVisible = false;
+    if (this.shadowRoot) {
+      this.renderGuidedDialog();
+    }
+    this.renderViewToggles();
+  }
+
+  get guidedSteps(): number[] {
+    return [...this._guidedSteps];
+  }
+
+  set guidedSteps(lines: Iterable<number>) {
+    this._guidedSteps = [...lines].filter(
+      (line) => Number.isInteger(line) && line > 0,
+    );
+    this.refreshGuidedComments();
+    this.guidedIndex = 0;
+    if (this.shadowRoot) {
+      this.renderGuidedDialog();
+    }
   }
 
   connectedCallback(): void {
@@ -532,6 +599,8 @@ export class TsTeachingDebuggerElement extends HTMLElement {
             this.showComments = !this.showComments;
           } else if (button.dataset.view === "questions") {
             this.showQuestions = !this.showQuestions;
+          } else if (button.dataset.view === "guided") {
+            this.guidedMode = !this.guidedMode;
           }
         },
         { signal },
@@ -543,6 +612,35 @@ export class TsTeachingDebuggerElement extends HTMLElement {
       () => {
         this.solutionVisible = !this.solutionVisible;
         this.renderTeachingCard();
+      },
+      { signal },
+    );
+
+    this.requiredElement<HTMLButtonElement>(".guided-close").addEventListener(
+      "click",
+      () => {
+        this.guidedMode = false;
+      },
+      { signal },
+    );
+
+    this.requiredElement<HTMLButtonElement>(".guided-previous").addEventListener(
+      "click",
+      () => this.moveGuidedStep(-1),
+      { signal },
+    );
+
+    this.requiredElement<HTMLButtonElement>(".guided-next").addEventListener(
+      "click",
+      () => this.moveGuidedStep(1),
+      { signal },
+    );
+
+    this.requiredElement<HTMLButtonElement>(".guided-solution-toggle").addEventListener(
+      "click",
+      () => {
+        this.guidedSolutionVisible = !this.guidedSolutionVisible;
+        this.renderGuidedDialog();
       },
       { signal },
     );
@@ -628,7 +726,126 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   private refreshTeachingComments(): void {
     this._teachingNotes = teachingNotesFromComments(this._code);
     this.teachingSymbols = parseTeachingSymbols(this._code);
+    this.refreshGuidedComments();
     this.applyCommentVisibility();
+    if (this.guidedEnabled && this.shadowRoot) {
+      this.renderGuidedDialog();
+    }
+  }
+
+  private refreshGuidedComments(): void {
+    const comments = parseTeachingComments(this._code);
+
+    if (this._guidedSteps.length > 0) {
+      this.guidedComments = this._guidedSteps.flatMap((line) => {
+        const comment = comments.find((candidate) => candidate.line === line);
+        return comment ? [comment] : [];
+      });
+    } else {
+      const sourceLines = this._code.split("\n");
+      this.guidedComments = comments.filter(
+        (comment) =>
+          !(sourceLines[comment.line - 1] ?? "").trimStart().startsWith("/**"),
+      );
+    }
+
+    this.guidedIndex = Math.min(
+      this.guidedIndex,
+      Math.max(0, this.guidedComments.length - 1),
+    );
+  }
+
+  private moveGuidedStep(direction: -1 | 1): void {
+    const next = this.guidedIndex + direction;
+
+    if (next >= this.guidedComments.length) {
+      this.guidedMode = false;
+      return;
+    }
+
+    this.guidedIndex = Math.max(0, next);
+    this.guidedSolutionVisible = false;
+    this.requiredElement<HTMLTextAreaElement>(".guided-response").value = "";
+    this.renderGuidedDialog();
+  }
+
+  private renderGuidedDialog(): void {
+    if (!this.shadowRoot || !this.editor) return;
+    const overlay = this.requiredElement<HTMLElement>(".guided-overlay");
+    const comment = this.guidedComments[this.guidedIndex];
+
+    if (!this.guidedEnabled || !comment) {
+      overlay.hidden = true;
+      setGuidedLine(this.editor);
+      return;
+    }
+
+    overlay.hidden = false;
+    setGuidedLine(this.editor, comment.line);
+    this.requiredElement<HTMLElement>(".guided-title").textContent = comment.title;
+    this.requiredElement<HTMLElement>(".guided-progress").textContent =
+      `${this.guidedIndex + 1} / ${this.guidedComments.length}`;
+    renderMarkdown(
+      this.requiredElement<HTMLElement>(".guided-documentation"),
+      comment.explanation,
+    );
+
+    const question = this.requiredElement<HTMLElement>(".guided-question");
+    question.hidden = !this.questionsVisible || !comment.question;
+
+    if (!question.hidden && comment.question) {
+      renderMarkdown(
+        this.requiredElement<HTMLElement>(".guided-question-prompt"),
+        comment.question,
+      );
+    }
+
+    const solution = this.requiredElement<HTMLElement>(".guided-solution");
+    solution.hidden = !this.guidedSolutionVisible;
+    const solutionToggle = this.requiredElement<HTMLButtonElement>(
+      ".guided-solution-toggle",
+    );
+    solutionToggle.textContent = this.guidedSolutionVisible
+      ? "Hide solution"
+      : "Reveal solution";
+
+    if (this.guidedSolutionVisible) {
+      renderMarkdown(
+        this.requiredElement<HTMLElement>(".guided-solution-copy"),
+        comment.solution ?? comment.explanation,
+      );
+    }
+
+    this.requiredElement<HTMLButtonElement>(".guided-previous").disabled =
+      this.guidedIndex === 0;
+    const next = this.requiredElement<HTMLButtonElement>(".guided-next");
+    next.textContent =
+      this.guidedIndex === this.guidedComments.length - 1 ? "Finish" : "Next";
+    this.positionGuidedDialog(comment.line);
+  }
+
+  private positionGuidedDialog(lineNumber: number): void {
+    if (!this.editor) return;
+
+    requestAnimationFrame(() => {
+      if (!this.editor || !this.guidedEnabled) return;
+      const line = this.editor.state.doc.line(lineNumber);
+      const coordinates = this.editor.coordsAtPos(line.from);
+      const pane = this.requiredElement<HTMLElement>(".editor-pane");
+      const dialog = this.requiredElement<HTMLElement>(".guided-dialog");
+
+      if (!coordinates) {
+        dialog.style.top = "18px";
+        return;
+      }
+
+      const paneBounds = pane.getBoundingClientRect();
+      const dialogHeight = dialog.offsetHeight || 320;
+      const below = coordinates.bottom - paneBounds.top + 10;
+      const above = coordinates.top - paneBounds.top - dialogHeight - 10;
+      const top = below + dialogHeight <= paneBounds.height - 12 ? below : above;
+      dialog.style.top = `${Math.max(12, top)}px`;
+    });
   }
 
   private createIdentifierHover(
@@ -786,8 +1003,10 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     if (!this.shadowRoot) return;
     const comments = this.requiredElement<HTMLButtonElement>('[data-view="comments"]');
     const questions = this.requiredElement<HTMLButtonElement>('[data-view="questions"]');
+    const guided = this.requiredElement<HTMLButtonElement>('[data-view="guided"]');
     comments.setAttribute("aria-pressed", String(this.commentsVisible));
     questions.setAttribute("aria-pressed", String(this.questionsVisible));
+    guided.setAttribute("aria-pressed", String(this.guidedEnabled));
   }
 
   private renderToolbar(): void {
