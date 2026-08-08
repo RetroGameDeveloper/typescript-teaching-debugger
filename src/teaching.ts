@@ -164,7 +164,7 @@ function multipleChoiceAssessment(note: TeachingNote, line: number): TeachingNot
     choices,
     question:
       note.question ??
-      "Based on the explanation above, which option best describes this step?",
+      "Using what you have learned so far, what do you think this step will do?",
     solution: note.solution ?? note.explanation,
   };
 }
