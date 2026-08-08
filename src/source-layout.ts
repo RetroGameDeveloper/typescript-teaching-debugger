@@ -7,8 +7,24 @@ export interface ReorderedCode {
 
 interface SourceSection {
   endLine: number;
-  kind: "function" | "runtime" | "type";
+  kind: "function" | "report" | "runtime" | "type";
   startLine: number;
+}
+
+function isConsoleReport(node: ReturnType<typeof parse>["program"]["body"][number]): boolean {
+  if (node.type !== "ExpressionStatement" || node.expression.type !== "CallExpression") {
+    return false;
+  }
+
+  const callee = node.expression.callee;
+  return (
+    callee.type === "MemberExpression" &&
+    !callee.computed &&
+    callee.object.type === "Identifier" &&
+    callee.object.name === "console" &&
+    callee.property.type === "Identifier" &&
+    callee.property.name === "log"
+  );
 }
 
 export function reorderForLearning(code: string): ReorderedCode {
@@ -26,6 +42,8 @@ export function reorderForLearning(code: string): ReorderedCode {
         kind:
           node.type === "FunctionDeclaration"
             ? "function"
+            : isConsoleReport(node)
+              ? "report"
             : node.type.startsWith("TS")
               ? "type"
               : "runtime",
@@ -33,7 +51,7 @@ export function reorderForLearning(code: string): ReorderedCode {
       },
     ];
   });
-  const ordered = ["type", "runtime", "function"].flatMap((kind) =>
+  const ordered = ["type", "runtime", "function", "report"].flatMap((kind) =>
     sections.filter((section) => section.kind === kind),
   );
   const output: string[] = [];
@@ -54,12 +72,22 @@ export function reorderForLearning(code: string): ReorderedCode {
   return { code: output.join("\n"), lineMap };
 }
 
-export function problemComment(title: string, description: string): string {
+export function problemComment(
+  title: string,
+  analogy: string,
+  explanation: string,
+): string {
   return [
     "/**",
     " * # Problem",
     " *",
-    ` * **${title}:** ${description}`,
+    ` * **${title}**`,
+    " *",
+    ` * ${analogy}`,
+    " *",
+    " * ## How it works",
+    " *",
+    ` * ${explanation}`,
     " */",
   ].join("\n");
 }
