@@ -90,22 +90,37 @@ Properties:
 
 * `code: string`
 * `breakpoints: number[]`
-* `teachingNotes: Record<number, { title: string; explanation: string }>`
+* `showComments: boolean`
+* `showQuestions: boolean`
 
-Teaching notes override the generic runtime explanation for a source line:
+Place a Markdown JSDoc block immediately above an executable line. The debugger
+uses it for the "Why this line exists" panel:
 
 ```ts
-teachingDebugger.teachingNotes = {
-  3: {
-    title: "Compare with the target",
-    explanation:
-      "This checks whether the current array element is the value being sought.",
-  },
-};
+/**
+ * ## Compare with the target
+ *
+ * This checks whether the current array element is the value being sought.
+ *
+ * ### Question
+ * What happens when `values[index]` equals `target`?
+ *
+ * ### Solution
+ * The function returns the current index and ends the search.
+ */
+if (values[index] === target) {
+  return index;
+}
 ```
 
-Editing code inside the component clears line-specific notes so stale guidance is
-not shown against modified source.
+`##` supplies the teaching title. Markdown below it supplies the explanation.
+The `### Question` and `### Solution` sections are optional. Content is parsed
+from the current editor source after edits, rather than held in separate lesson
+metadata.
+
+The toolbar toggles comment blocks and questions independently. Hiding comments
+only changes their editor presentation; their content remains available to the
+teaching panel. The properties above can set the initial or current toggle state.
 
 Methods:
 
