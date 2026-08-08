@@ -334,6 +334,90 @@ export const debuggerStyles: string = `
     color: var(--debug-green);
   }
 
+  .cm-tooltip-teaching {
+    background: #252629;
+    border: 1px solid #4b4f52;
+    border-radius: 7px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.38);
+    color: var(--debug-text);
+    font: 11px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+    max-width: min(360px, 70vw);
+    min-width: 210px;
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .hover-header {
+    align-items: center;
+    background: #292a2d;
+    border-bottom: 1px solid var(--debug-border);
+    display: flex;
+    gap: 8px;
+    justify-content: space-between;
+    padding: 7px 9px;
+  }
+
+  .hover-name {
+    color: var(--debug-blue);
+    font: 600 11px/1.3 var(--debug-mono);
+  }
+
+  .hover-kind {
+    color: var(--debug-muted);
+    font: 9px/1 var(--debug-mono);
+    text-transform: uppercase;
+  }
+
+  .hover-label {
+    color: var(--debug-muted);
+    font: 600 8px/1.3 var(--debug-mono);
+    letter-spacing: 0.08em;
+    padding: 8px 9px 0;
+    text-transform: uppercase;
+  }
+
+  .hover-value {
+    color: #e8eaed;
+    font: 10px/1.45 var(--debug-mono);
+    margin: 0;
+    max-height: 180px;
+    overflow: auto;
+    padding: 4px 9px 9px;
+    white-space: pre-wrap;
+  }
+
+  .hover-documentation {
+    border-top: 1px solid var(--debug-border-soft);
+    padding: 8px 9px 9px;
+  }
+
+  .hover-doc-title {
+    color: var(--debug-text);
+    font-weight: 600;
+    margin-bottom: 3px;
+  }
+
+  .hover-doc-copy {
+    color: var(--debug-muted);
+  }
+
+  .hover-doc-copy p {
+    margin: 0;
+  }
+
+  .hover-doc-copy p + p,
+  .hover-doc-copy ul {
+    margin: 5px 0 0;
+  }
+
+  .hover-doc-copy code {
+    background: rgba(138, 180, 248, 0.11);
+    border-radius: 3px;
+    color: var(--debug-blue);
+    font: 10px/1.4 var(--debug-mono);
+    padding: 1px 3px;
+  }
+
   .ast-token {
     background: rgba(138, 180, 248, 0.13);
     border: 1px solid rgba(138, 180, 248, 0.25);
