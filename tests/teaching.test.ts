@@ -104,4 +104,25 @@ function find(values: number[], target: number): number {
       "Why does the example start at `1`?",
     );
   });
+
+  it("generates a multiple-choice check from the explanation already shown", () => {
+    const annotated = annotateCode(
+      "if (value === target) return true;",
+      {
+        1: {
+          title: "Compare with the target",
+          explanation: "Checks whether the current value matches the target.",
+        },
+      },
+      [1],
+    );
+    const comment = parseTeachingComments(annotated.code)[0];
+
+    expect(comment?.question).toBe(
+      "Based on the explanation above, which option best describes this step?",
+    );
+    expect(comment?.choices).toHaveLength(3);
+    expect(comment?.answer).toBeGreaterThanOrEqual(0);
+    expect(comment?.choices?.[comment?.answer ?? -1]).toBe(comment?.solution);
+  });
 });
