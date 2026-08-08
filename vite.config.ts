@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 
 export default defineConfig(({ mode }) => ({
-  base: mode === "demo" ? "/-typescript-teaching-debugger/" : "/",
+  base: mode === "demo" ? "/typescript-teaching-debugger/" : "/",
   build:
     mode === "demo"
       ? {
