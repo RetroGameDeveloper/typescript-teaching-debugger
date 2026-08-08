@@ -31,9 +31,11 @@ import { tags } from "@lezer/highlight";
 import type { ExecutionPoint } from "./core/types";
 
 interface BreakpointChange {
-  enabled: boolean;
+  kind?: BreakpointKind;
   position: number;
 }
+
+export type BreakpointKind = "regular" | "once";
 
 interface ActiveRange {
   from: number;
@@ -112,17 +114,23 @@ const markdownCommentsEffect = StateEffect.define<EditorRange[]>({
 });
 
 class BreakpointMarker extends GutterMarker {
-  readonly elementClass = "cm-breakpoint-marker";
+  readonly elementClass: string;
+
+  constructor(readonly kind: BreakpointKind) {
+    super();
+    this.elementClass = `cm-breakpoint-marker cm-breakpoint-marker-${kind}`;
+  }
 
   toDOM(): HTMLElement {
     const marker = document.createElement("span");
-    marker.className = "cm-breakpoint-chevron";
+    marker.className = `cm-breakpoint-chevron cm-breakpoint-chevron-${this.kind}`;
     marker.setAttribute("aria-hidden", "true");
     return marker;
   }
 }
 
-const breakpointMarker = new BreakpointMarker();
+const breakpointMarker = new BreakpointMarker("regular");
+const oneTimeBreakpointMarker = new BreakpointMarker("once");
 
 const chromeDarkHighlightStyle = HighlightStyle.define([
   {
@@ -169,8 +177,8 @@ const breakpointState = StateField.define<RangeSet<GutterMarker>>({
     for (const effect of transaction.effects) {
       if (!effect.is(breakpointEffect)) continue;
       next = next.update({
-        add: effect.value.enabled
-          ? [breakpointMarker.range(effect.value.position)]
+        add: effect.value.kind
+          ? [(effect.value.kind === "once" ? oneTimeBreakpointMarker : breakpointMarker).range(effect.value.position)]
           : [],
         filter: (from) => from !== effect.value.position,
         sort: true,
@@ -471,12 +479,12 @@ const guidedRangeState = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 
-function hasBreakpoint(view: EditorView, position: number): boolean {
-  let found = false;
-  view.state.field(breakpointState).between(position, position, () => {
-    found = true;
+function breakpointKindAt(view: EditorView, position: number): BreakpointKind | undefined {
+  let kind: BreakpointKind | undefined;
+  view.state.field(breakpointState).between(position, position, (_from, _to, marker) => {
+    kind = marker === oneTimeBreakpointMarker ? "once" : "regular";
   });
-  return found;
+  return kind;
 }
 
 export function readBreakpointLines(view: EditorView): number[] {
@@ -489,18 +497,21 @@ export function readBreakpointLines(view: EditorView): number[] {
   return lines.sort((left, right) => left - right);
 }
 
-function breakpointGutter(onChange: (lines: number[]) => void): Extension {
+function breakpointGutter(
+  onChange: (line: number, kind: BreakpointKind | undefined) => void,
+): Extension {
   return gutter({
     class: "cm-breakpoint-gutter",
     initialSpacer: () => breakpointMarker,
     markers: (view) => view.state.field(breakpointState),
     domEventHandlers: {
       mousedown: (view, line) => {
-        const enabled = !hasBreakpoint(view, line.from);
+        const current = breakpointKindAt(view, line.from);
+        const kind = current === undefined ? "regular" : current === "regular" ? "once" : undefined;
         view.dispatch({
-          effects: breakpointEffect.of({ enabled, position: line.from }),
+          effects: breakpointEffect.of({ kind, position: line.from }),
         });
-        onChange(readBreakpointLines(view));
+        onChange(view.state.doc.lineAt(line.from).number, kind);
         return true;
       },
     },
@@ -510,7 +521,7 @@ function breakpointGutter(onChange: (lines: number[]) => void): Extension {
 export interface CreateEditorOptions {
   code: string;
   createHover: (identifier: string, position: number) => HTMLElement | undefined;
-  onBreakpointsChange: (lines: number[]) => void;
+  onBreakpointsChange: (line: number, kind: BreakpointKind | undefined) => void;
   onChange: (code: string) => void;
   parent: HTMLElement;
   readOnly: boolean;
@@ -620,6 +631,14 @@ export function createEditor({
             display: "block",
             height: "13px",
             width: "13px",
+          },
+          ".cm-breakpoint-chevron-once": {
+            backgroundColor: "transparent",
+            border: "2px solid #8ab4f8",
+            clipPath: "none",
+            transform: "rotate(45deg)",
+            width: "10px",
+            height: "10px",
           },
           ".cm-activeLine": {
             backgroundColor: "rgba(138, 180, 248, 0.045)",
@@ -748,16 +767,25 @@ export function setActivePoint(
 export function setEditorBreakpoints(
   view: EditorView,
   lines: Iterable<number>,
+  oneTimeLines: Iterable<number> = [],
 ): void {
   const requested = new Set(lines);
-  const current = new Set(readBreakpointLines(view));
+  const requestedOneTime = new Set(oneTimeLines);
+  const current = new Map<number, BreakpointKind>();
+  view.state.field(breakpointState).between(0, view.state.doc.length, (from, _to, marker) => {
+    current.set(
+      view.state.doc.lineAt(from).number,
+      marker === oneTimeBreakpointMarker ? "once" : "regular",
+    );
+  });
   const effects: StateEffect<unknown>[] = [];
 
-  for (const line of current) {
-    if (!requested.has(line)) {
+  for (const [line, kind] of current) {
+    const requestedKind = requestedOneTime.has(line) ? "once" : "regular";
+    if (!requested.has(line) || kind !== requestedKind) {
       effects.push(
         breakpointEffect.of({
-          enabled: false,
+          kind: undefined,
           position: view.state.doc.line(line).from,
         }),
       );
@@ -766,14 +794,14 @@ export function setEditorBreakpoints(
 
   for (const line of requested) {
     if (
-      !current.has(line) &&
+      current.get(line) !== (requestedOneTime.has(line) ? "once" : "regular") &&
       Number.isInteger(line) &&
       line > 0 &&
       line <= view.state.doc.lines
     ) {
       effects.push(
         breakpointEffect.of({
-          enabled: true,
+          kind: requestedOneTime.has(line) ? "once" : "regular",
           position: view.state.doc.line(line).from,
         }),
       );
