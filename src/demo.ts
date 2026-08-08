@@ -1,12 +1,11 @@
 import "./ts-teaching-debugger";
 import {
   algorithmExamples,
-  type AlgorithmCategory,
   type AlgorithmExample,
 } from "./examples";
 import type { TsTeachingDebuggerElement } from "./ts-teaching-debugger";
+import { curriculumGroups } from "./curriculum";
 
-type CategoryFilter = "All" | AlgorithmCategory;
 
 const teachingDebugger = document.querySelector<TsTeachingDebuggerElement>(
   "#debugger",
@@ -14,15 +13,16 @@ const teachingDebugger = document.querySelector<TsTeachingDebuggerElement>(
 const exampleList = requiredElement<HTMLElement>("#example-list");
 const exampleCount = requiredElement<HTMLElement>("#example-count");
 const searchInput = requiredElement<HTMLInputElement>("#example-search");
-const categoryFilters = requiredElement<HTMLElement>("#category-filters");
 const lessonCategory = requiredElement<HTMLElement>("#lesson-category");
 const lessonTitle = requiredElement<HTMLElement>("#lesson-title");
 const lessonDescription = requiredElement<HTMLElement>("#lesson-description");
 const timeComplexity = requiredElement<HTMLElement>("#time-complexity");
 const spaceComplexity = requiredElement<HTMLElement>("#space-complexity");
 
-let activeCategory: CategoryFilter = "All";
-const firstExample = algorithmExamples[0];
+const examplesById = new Map(
+  algorithmExamples.map((example) => [example.id, example]),
+);
+const firstExample = examplesById.get(curriculumGroups[0]?.ids[0] ?? "");
 
 if (!firstExample) {
   throw new Error("The algorithm library must contain at least one example.");
@@ -41,26 +41,17 @@ function requiredElement<ElementType extends Element>(selector: string): Element
   return element;
 }
 
-function categories(): CategoryFilter[] {
-  return [
-    "All",
-    ...new Set(algorithmExamples.map((example) => example.category)),
-  ];
-}
-
 function filteredExamples(): AlgorithmExample[] {
   const normalizedQuery = query.trim().toLowerCase();
 
   return algorithmExamples.filter((example) => {
-    const matchesCategory =
-      activeCategory === "All" || example.category === activeCategory;
     const matchesQuery =
       normalizedQuery.length === 0 ||
       `${example.title} ${example.description} ${example.category}`
         .toLowerCase()
         .includes(normalizedQuery);
 
-    return matchesCategory && matchesQuery;
+    return matchesQuery;
   });
 }
 
@@ -80,26 +71,9 @@ function selectExample(example: AlgorithmExample): void {
   renderExampleList();
 }
 
-function renderCategoryFilters(): void {
-  categoryFilters.replaceChildren();
-
-  for (const category of categories()) {
-    const button = document.createElement("button");
-    button.className = "category-button";
-    button.type = "button";
-    button.textContent = category;
-    button.setAttribute("aria-pressed", String(category === activeCategory));
-    button.addEventListener("click", () => {
-      activeCategory = category;
-      renderCategoryFilters();
-      renderExampleList();
-    });
-    categoryFilters.append(button);
-  }
-}
-
 function renderExampleList(): void {
   const examples = filteredExamples();
+  const visibleIds = new Set(examples.map((example) => example.id));
   exampleList.replaceChildren();
   exampleCount.textContent = String(examples.length);
 
@@ -111,27 +85,51 @@ function renderExampleList(): void {
     return;
   }
 
-  for (const example of examples) {
-    const button = document.createElement("button");
-    button.className = "example-button";
-    button.type = "button";
-    button.setAttribute("aria-current", String(example.id === activeExample.id));
+  for (const [groupIndex, curriculumGroup] of curriculumGroups.entries()) {
+    const groupExamples = curriculumGroup.ids
+      .filter((id) => visibleIds.has(id))
+      .map((id) => examplesById.get(id))
+      .filter((example): example is AlgorithmExample => Boolean(example));
 
-    const title = document.createElement("span");
-    title.className = "example-title";
-    title.textContent = example.title;
+    if (groupExamples.length === 0) continue;
 
-    const description = document.createElement("span");
-    description.className = "example-summary";
-    description.textContent = example.description;
+    const group = document.createElement("section");
+    group.className = "example-group";
+    const heading = document.createElement("div");
+    heading.className = "example-group-heading";
+    const order = document.createElement("span");
+    order.className = "example-group-order";
+    order.textContent = String(groupIndex + 1).padStart(2, "0");
+    const groupTitle = document.createElement("h3");
+    groupTitle.className = "example-group-title";
+    groupTitle.textContent = curriculumGroup.title;
+    heading.append(order, groupTitle);
+    group.append(heading);
 
-    const complexity = document.createElement("span");
-    complexity.className = "example-complexity";
-    complexity.textContent = `${example.timeComplexity} time - ${example.spaceComplexity} space`;
+    for (const example of groupExamples) {
+      const button = document.createElement("button");
+      button.className = "example-button";
+      button.type = "button";
+      button.setAttribute("aria-current", String(example.id === activeExample.id));
 
-    button.append(title, description, complexity);
-    button.addEventListener("click", () => selectExample(example));
-    exampleList.append(button);
+      const title = document.createElement("span");
+      title.className = "example-title";
+      title.textContent = example.title;
+
+      const description = document.createElement("span");
+      description.className = "example-summary";
+      description.textContent = example.description;
+
+      const complexity = document.createElement("span");
+      complexity.className = "example-complexity";
+      complexity.textContent = `${example.timeComplexity} time - ${example.spaceComplexity} space`;
+
+      button.append(title, description, complexity);
+      button.addEventListener("click", () => selectExample(example));
+      group.append(button);
+    }
+
+    exampleList.append(group);
   }
 }
 
@@ -140,5 +138,4 @@ searchInput.addEventListener("input", () => {
   renderExampleList();
 });
 
-renderCategoryFilters();
 selectExample(activeExample);
