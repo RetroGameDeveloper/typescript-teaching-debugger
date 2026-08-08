@@ -13,7 +13,7 @@ An embeddable custom element that teaches synchronous TypeScript execution using
 * Responsive Chrome DevTools-inspired interface
 * Shadow DOM style isolation
 * Keyboard controls matching common browser debuggers
-* Searchable teaching library with 12 classic algorithms
+* Searchable teaching library with 17 classic algorithms
 
 ## Included lessons
 
@@ -22,6 +22,10 @@ and quick sort; breadth-first and depth-first graph traversal; Dijkstra shortest
 paths; recursive factorial; and Fibonacci tabulation. Every lesson includes
 time and space complexity, suggested breakpoints, and code that can be stepped
 through inside the teaching runtime.
+
+Compiler lessons cover CFG reverse postorder, iterative dominator analysis,
+dominance frontiers, Cytron phi-function placement, and dominator-tree SSA
+renaming.
 
 ## Install
 
