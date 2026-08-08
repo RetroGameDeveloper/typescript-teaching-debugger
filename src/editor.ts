@@ -62,6 +62,17 @@ const activeRangeEffect = StateEffect.define<ActiveRange | null>({
       : null,
 });
 
+const guidedRangeEffect = StateEffect.define<ActiveRange | null>({
+  map: (value, mapping) =>
+    value
+      ? {
+          from: mapping.mapPos(value.from),
+          lineFrom: mapping.mapPos(value.lineFrom),
+          to: mapping.mapPos(value.to),
+        }
+      : null,
+});
+
 const hiddenCommentsEffect = StateEffect.define<EditorRange[]>({
   map: (ranges, mapping) =>
     ranges.map((range) => ({
@@ -195,6 +206,36 @@ const hiddenCommentsState = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 
+const guidedRangeState = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update: (decorations, transaction) => {
+    let next = decorations.map(transaction.changes);
+
+    for (const effect of transaction.effects) {
+      if (!effect.is(guidedRangeEffect)) continue;
+
+      if (!effect.value) {
+        next = Decoration.none;
+        continue;
+      }
+
+      next = Decoration.set(
+        [
+          Decoration.line({ class: "cm-guided-line" }).range(effect.value.lineFrom),
+          Decoration.mark({ class: "cm-guided-code" }).range(
+            effect.value.from,
+            effect.value.to,
+          ),
+        ],
+        true,
+      );
+    }
+
+    return next;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
 function hasBreakpoint(view: EditorView, position: number): boolean {
   let found = false;
   view.state.field(breakpointState).between(position, position, () => {
@@ -256,6 +297,7 @@ export function createEditor({
       breakpointGutter(onBreakpointsChange),
       activeRangeState,
       hiddenCommentsState,
+      guidedRangeState,
       highlightSpecialChars(),
       drawSelection(),
       dropCursor(),
@@ -354,6 +396,14 @@ export function createEditor({
             backgroundColor: "rgba(138, 180, 248, 0.14)",
             borderBottom: "1px solid rgba(138, 180, 248, 0.72)",
           },
+          ".cm-guided-line": {
+            backgroundColor: "rgba(197, 138, 249, 0.09)",
+            boxShadow: "inset 3px 0 0 #c58af9",
+          },
+          ".cm-guided-code": {
+            backgroundColor: "rgba(197, 138, 249, 0.18)",
+            borderBottom: "1px solid rgba(197, 138, 249, 0.78)",
+          },
           ".cm-selectionBackground, ::selection": {
             backgroundColor: "rgba(138, 180, 248, 0.27) !important",
           },
@@ -448,5 +498,21 @@ export function setCommentVisibility(
 ): void {
   view.dispatch({
     effects: hiddenCommentsEffect.of(visible ? [] : ranges),
+  });
+}
+
+export function setGuidedLine(view: EditorView, lineNumber?: number): void {
+  if (!lineNumber || lineNumber < 1 || lineNumber > view.state.doc.lines) {
+    view.dispatch({ effects: guidedRangeEffect.of(null) });
+    return;
+  }
+
+  const line = view.state.doc.line(lineNumber);
+  const contentOffset = line.text.search(/\S/);
+  const from = contentOffset >= 0 ? line.from + contentOffset : line.from;
+  view.dispatch({
+    effects: guidedRangeEffect.of({ from, lineFrom: line.from, to: line.to }),
+    scrollIntoView: true,
+    selection: { anchor: from },
   });
 }
