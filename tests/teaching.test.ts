@@ -89,4 +89,19 @@ function find(values: number[], target: number): number {
     ]);
     expect(symbols[2]?.note.explanation).toBe("The value to locate.");
   });
+
+  it("keeps a configured question even when it has no solution yet", () => {
+    const annotated = annotateCode("const value = 1;", {
+      1: {
+        title: "Choose a value",
+        explanation: "Creates the example input.",
+        question: "Why does the example start at `1`?",
+      },
+    });
+
+    expect(annotated.code).toContain("### Question");
+    expect(parseTeachingComments(annotated.code)[0]?.question).toBe(
+      "Why does the example start at `1`?",
+    );
+  });
 });
