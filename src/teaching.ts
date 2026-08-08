@@ -155,15 +155,15 @@ function commentBody(note: TeachingNote, indentation: string): string[] {
     }
   }
 
-  if (note.question && note.solution) {
+  if (note.question) {
     lines.push(
       " *",
       " * ### Question",
       ` * ${note.question}`,
-      " *",
-      " * ### Solution",
-      ` * ${note.solution}`,
     );
+    if (note.solution) {
+      lines.push(" *", " * ### Solution", ` * ${note.solution}`);
+    }
   }
 
   lines.push(" */");
