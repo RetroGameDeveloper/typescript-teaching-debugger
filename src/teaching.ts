@@ -1,5 +1,7 @@
 export interface TeachingNote {
+  answer?: number;
   arguments?: Record<string, string>;
+  choices?: string[];
   explanation: string;
   question?: string;
   solution?: string;
@@ -145,6 +147,28 @@ function describeArgument(name: string): string {
   return argumentDescriptions[name] ?? `The \`${name}\` value supplied to this function.`;
 }
 
+function multipleChoiceAssessment(note: TeachingNote, line: number): TeachingNote {
+  if (note.choices && note.choices.length >= 2) return note;
+  const correctChoice = note.solution ?? note.explanation;
+  const distractors = [
+    "This clears the current data and restarts the algorithm from the beginning.",
+    "This skips the remaining work and immediately reports a final result.",
+  ];
+  const answer = Math.abs(line) % 3;
+  const choices = [...distractors];
+  choices.splice(answer, 0, correctChoice);
+
+  return {
+    ...note,
+    answer,
+    choices,
+    question:
+      note.question ??
+      "Based on the explanation above, which option best describes this step?",
+    solution: note.solution ?? note.explanation,
+  };
+}
+
 function commentBody(note: TeachingNote, indentation: string): string[] {
   const lines = ["/**", ` * ## ${note.title}`, ` * ${note.explanation}`];
 
@@ -161,6 +185,13 @@ function commentBody(note: TeachingNote, indentation: string): string[] {
       " * ### Question",
       ` * ${note.question}`,
     );
+    if (note.choices && note.choices.length > 0) {
+      lines.push(" *", " * ### Choices");
+      for (const choice of note.choices) lines.push(` * * ${choice}`);
+    }
+    if (note.answer !== undefined) {
+      lines.push(" *", " * ### Answer", ` * ${note.answer + 1}`);
+    }
     if (note.solution) {
       lines.push(" *", " * ### Solution", ` * ${note.solution}`);
     }
@@ -185,14 +216,8 @@ export function annotateCode(
     const sourceNote = sourceNotes[sourceLine];
 
     if (sourceNote) {
-      let note = questions.has(sourceLine)
-        ? {
-            ...sourceNote,
-            question:
-              sourceNote.question ??
-              `What role does "${sourceNote.title}" play in this algorithm?`,
-            solution: sourceNote.solution ?? sourceNote.explanation,
-          }
+      let note: TeachingNote = questions.has(sourceLine)
+        ? multipleChoiceAssessment(sourceNote, sourceLine)
         : sourceNote;
       const signature = functionSignature(sourceLines.slice(index).join("\n"));
       if (signature && !note.arguments) {
@@ -239,13 +264,15 @@ export function parseTeachingComments(code: string): TeachingComment[] {
       /^#{1,6}\s+(Arguments|Parameters)\s*$/i.test(line),
     );
     const questionIndex = lines.findIndex((line) => /^#{1,6}\s+Question\s*$/i.test(line));
-    const solutionIndex = lines.findIndex((line) => /^#{1,6}\s+(Solution|Answer)\s*$/i.test(line));
-    const explanationEnd = [argumentsIndex, questionIndex, solutionIndex]
+    const choicesIndex = lines.findIndex((line) => /^#{1,6}\s+Choices\s*$/i.test(line));
+    const answerIndex = lines.findIndex((line) => /^#{1,6}\s+Answer\s*$/i.test(line));
+    const solutionIndex = lines.findIndex((line) => /^#{1,6}\s+Solution\s*$/i.test(line));
+    const explanationEnd = [argumentsIndex, questionIndex, choicesIndex, answerIndex, solutionIndex]
       .filter((index) => index >= 0)
       .reduce((lowest, index) => Math.min(lowest, index), lines.length);
     const title = lines[titleIndex]?.replace(/^#{1,6}\s+/, "").trim() ?? "Why this line exists";
     const explanation = section(lines, titleIndex + 1, explanationEnd);
-    const argumentsEnd = [questionIndex, solutionIndex]
+    const argumentsEnd = [questionIndex, choicesIndex, answerIndex, solutionIndex]
       .filter((index) => index > argumentsIndex)
       .reduce((lowest, index) => Math.min(lowest, index), lines.length);
     const argumentEntries = argumentsIndex >= 0
@@ -260,10 +287,40 @@ export function parseTeachingComments(code: string): TeachingComment[] {
       argumentEntries.length > 0 ? Object.fromEntries(argumentEntries) : undefined;
     const question =
       questionIndex >= 0
-        ? section(lines, questionIndex + 1, solutionIndex >= 0 ? solutionIndex : lines.length)
+        ? section(
+            lines,
+            questionIndex + 1,
+            [choicesIndex, answerIndex, solutionIndex]
+              .filter((index) => index > questionIndex)
+              .reduce((lowest, index) => Math.min(lowest, index), lines.length),
+          )
         : undefined;
-    const solution =
-      solutionIndex >= 0 ? section(lines, solutionIndex + 1, lines.length) : undefined;
+    const choicesEnd = [answerIndex, solutionIndex]
+      .filter((index) => index > choicesIndex)
+      .reduce((lowest, index) => Math.min(lowest, index), lines.length);
+    const choices = choicesIndex >= 0
+      ? lines
+          .slice(choicesIndex + 1, choicesEnd)
+          .flatMap((line) => {
+            const choice = line.match(/^[-*]\s+(.+)$/)?.[1]?.trim();
+            return choice ? [choice] : [];
+          })
+      : undefined;
+    const answerBody = answerIndex >= 0
+      ? section(
+          lines,
+          answerIndex + 1,
+          solutionIndex > answerIndex ? solutionIndex : lines.length,
+        )
+      : undefined;
+    const parsedAnswer = answerBody && /^\d+$/.test(answerBody)
+      ? Number(answerBody) - 1
+      : undefined;
+    const solution = solutionIndex >= 0
+      ? section(lines, solutionIndex + 1, lines.length)
+      : answerBody && parsedAnswer === undefined
+        ? answerBody
+        : undefined;
     let next = pattern.lastIndex;
 
     while (code[next] === " " || code[next] === "\t" || code[next] === "\r" || code[next] === "\n") {
@@ -275,7 +332,9 @@ export function parseTeachingComments(code: string): TeachingComment[] {
     const afterCommentLine = code.indexOf("\n", pattern.lastIndex);
 
     comments.push({
+      ...(parsedAnswer !== undefined ? { answer: parsedAnswer } : {}),
       ...(argumentsDocumentation ? { arguments: argumentsDocumentation } : {}),
+      ...(choices && choices.length > 0 ? { choices } : {}),
       explanation,
       from: lineStart,
       line,
@@ -292,9 +351,17 @@ export function parseTeachingComments(code: string): TeachingComment[] {
 
 export function teachingNotesFromComments(code: string): TeachingNotes {
   return Object.fromEntries(
-    parseTeachingComments(code).map(({ arguments: args, explanation, line, question, solution, title }) => [
+    parseTeachingComments(code).map(({ answer, arguments: args, choices, explanation, line, question, solution, title }) => [
       line,
-      { ...(args ? { arguments: args } : {}), explanation, question, solution, title },
+      {
+        ...(answer !== undefined ? { answer } : {}),
+        ...(args ? { arguments: args } : {}),
+        ...(choices ? { choices } : {}),
+        explanation,
+        question,
+        solution,
+        title,
+      },
     ]),
   );
 }
@@ -319,7 +386,9 @@ export function parseTeachingSymbols(code: string): TeachingSymbol[] {
     if (!matchName) return [];
 
     const note: TeachingNote = {
+      ...(comment.answer !== undefined ? { answer: comment.answer } : {}),
       ...(comment.arguments ? { arguments: comment.arguments } : {}),
+      ...(comment.choices ? { choices: comment.choices } : {}),
       explanation: comment.explanation,
       question: comment.question,
       solution: comment.solution,
