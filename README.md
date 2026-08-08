@@ -111,10 +111,6 @@ uses it for the "Why this line exists" panel:
  *
  * This checks whether the current array element is the value being sought.
  *
- * ### Arguments
- * * `values` - The array being searched.
- * * `target` - The value to locate.
- *
  * ### Question
  * What happens when `values[index]` equals `target`?
  *
@@ -123,6 +119,23 @@ uses it for the "Why this line exists" panel:
  */
 if (values[index] === target) {
   return index;
+}
+```
+
+Function blocks can additionally document their parameters:
+
+```ts
+/**
+ * ## Linear search
+ *
+ * Finds the first value equal to the requested target.
+ *
+ * ### Arguments
+ * * `values` - The array being searched.
+ * * `target` - The value to locate.
+ */
+function linearSearch(values: number[], target: number): number {
+  // ...
 }
 ```
 
