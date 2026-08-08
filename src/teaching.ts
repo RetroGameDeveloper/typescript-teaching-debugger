@@ -14,6 +14,14 @@ export interface TeachingComment extends TeachingNote {
   to: number;
 }
 
+export interface TeachingSymbol {
+  kind: "function" | "variable";
+  line: number;
+  name: string;
+  note: TeachingNote;
+  position: number;
+}
+
 export interface AnnotatedCode {
   code: string;
   lineMap: Record<number, number>;
@@ -136,4 +144,39 @@ export function teachingNotesFromComments(code: string): TeachingNotes {
       { explanation, question, solution, title },
     ]),
   );
+}
+
+export function parseTeachingSymbols(code: string): TeachingSymbol[] {
+  const sourceLines = code.split("\n");
+  const lineStarts: number[] = [];
+  let position = 0;
+
+  for (const line of sourceLines) {
+    lineStarts.push(position);
+    position += line.length + 1;
+  }
+
+  return parseTeachingComments(code).flatMap((comment) => {
+    const source = sourceLines[comment.line - 1] ?? "";
+    const functionMatch = source.match(/\bfunction\s+([A-Za-z_$][\w$]*)/);
+    const variableMatch = source.match(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)/);
+    const match = functionMatch ?? variableMatch;
+
+    if (!match?.[1]) return [];
+
+    return [
+      {
+        kind: functionMatch ? "function" : "variable",
+        line: comment.line,
+        name: match[1],
+        note: {
+          explanation: comment.explanation,
+          question: comment.question,
+          solution: comment.solution,
+          title: comment.title,
+        },
+        position: (lineStarts[comment.line - 1] ?? 0) + source.indexOf(match[1]),
+      } satisfies TeachingSymbol,
+    ];
+  });
 }
