@@ -58,14 +58,7 @@ console.log(answer);`;
       false,
     );
 
-    const questions = element.shadowRoot?.querySelector<HTMLButtonElement>(
-      '[data-view="questions"]',
-    );
-    questions?.click();
-    expect(element.showQuestions).toBe(false);
-    expect(element.shadowRoot?.querySelector(".teaching-question")?.hasAttribute("hidden")).toBe(
-      true,
-    );
+    expect(element.shadowRoot?.querySelector('[data-view="questions"]')).toBeNull();
 
     const comments = element.shadowRoot?.querySelector<HTMLButtonElement>(
       '[data-view="comments"]',
@@ -121,7 +114,6 @@ console.log(answer);`;
       "ts-teaching-debugger",
     ) as TsTeachingDebuggerElement;
     element.code = annotated.code;
-    element.guidedMode = true;
     document.body.append(element);
 
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -136,6 +128,7 @@ console.log(answer);`;
     expect(element.shadowRoot?.querySelector(".guided-overlay")?.hasAttribute("hidden")).toBe(
       false,
     );
+    expect(element.guidedMode).toBe(true);
     expect(title?.textContent).toBe("Create the first value");
     expect(previous?.disabled).toBe(true);
     expect(element.shadowRoot?.querySelector(".guided-question")?.hasAttribute("hidden")).toBe(
