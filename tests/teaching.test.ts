@@ -119,7 +119,7 @@ function find(values: number[], target: number): number {
     const comment = parseTeachingComments(annotated.code)[0];
 
     expect(comment?.question).toBe(
-      "Based on the explanation above, which option best describes this step?",
+      "Using what you have learned so far, what do you think this step will do?",
     );
     expect(comment?.choices).toHaveLength(3);
     expect(comment?.answer).toBeGreaterThanOrEqual(0);
