@@ -38,6 +38,11 @@ interface ActiveRange {
   to: number;
 }
 
+export interface EditorRange {
+  from: number;
+  to: number;
+}
+
 const breakpointEffect = StateEffect.define<BreakpointChange>({
   map: (value, mapping) => ({
     ...value,
@@ -54,6 +59,14 @@ const activeRangeEffect = StateEffect.define<ActiveRange | null>({
           to: mapping.mapPos(value.to),
         }
       : null,
+});
+
+const hiddenCommentsEffect = StateEffect.define<EditorRange[]>({
+  map: (ranges, mapping) =>
+    ranges.map((range) => ({
+      from: mapping.mapPos(range.from),
+      to: mapping.mapPos(range.to),
+    })),
 });
 
 class BreakpointMarker extends GutterMarker {
@@ -160,6 +173,27 @@ const activeRangeState = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 
+const hiddenCommentsState = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update: (decorations, transaction) => {
+    let next = decorations.map(transaction.changes);
+
+    for (const effect of transaction.effects) {
+      if (effect.is(hiddenCommentsEffect)) {
+        next = Decoration.set(
+          effect.value.map((range) =>
+            Decoration.replace({ block: true }).range(range.from, range.to),
+          ),
+          true,
+        );
+      }
+    }
+
+    return next;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
 function hasBreakpoint(view: EditorView, position: number): boolean {
   let found = false;
   view.state.field(breakpointState).between(position, position, () => {
@@ -218,6 +252,7 @@ export function createEditor({
       breakpointState,
       breakpointGutter(onBreakpointsChange),
       activeRangeState,
+      hiddenCommentsState,
       highlightSpecialChars(),
       drawSelection(),
       dropCursor(),
@@ -374,5 +409,15 @@ export function setEditorCode(view: EditorView, code: string): void {
   if (current === code) return;
   view.dispatch({
     changes: { from: 0, to: view.state.doc.length, insert: code },
+  });
+}
+
+export function setCommentVisibility(
+  view: EditorView,
+  ranges: EditorRange[],
+  visible: boolean,
+): void {
+  view.dispatch({
+    effects: hiddenCommentsEffect.of(visible ? [] : ranges),
   });
 }
