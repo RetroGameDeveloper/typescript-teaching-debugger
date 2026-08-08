@@ -55,8 +55,8 @@ console.log(answer);`;
     expect(element.shadowRoot?.querySelector(".teaching-question")?.hasAttribute("hidden")).toBe(
       false,
     );
-    expect(element.shadowRoot?.querySelector(".teaching-copy strong")?.textContent).toBe(
-      "42",
+    expect(element.shadowRoot?.querySelector(".teaching-title")?.textContent).toBe(
+      "Display the computed answer",
     );
 
     const reveal = element.shadowRoot?.querySelector<HTMLButtonElement>(
@@ -102,6 +102,27 @@ console.log(answer);`;
     expect(
       element.shadowRoot?.querySelector(".statusbar-state")?.getAttribute("data-status"),
     ).toBe("paused");
+  });
+
+  it("dims unfocused code and shows runtime controls while normally paused", async () => {
+    const element = document.createElement(
+      "ts-teaching-debugger",
+    ) as TsTeachingDebuggerElement;
+    element.guidedMode = false;
+    element.code = "const first = 1;\nconst second = first + 1;";
+    document.body.append(element);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(element.shadowRoot?.querySelector(".cm-debug-dim")).not.toBeNull();
+    expect(element.shadowRoot?.querySelector(".cm-guided-dim")).toBeNull();
+    expect(
+      element.shadowRoot?.querySelector(".runtime-sidebar-controls")?.hasAttribute("hidden"),
+    ).toBe(false);
+    expect(
+      element.shadowRoot?.querySelector(".guided-sidebar-controls")?.hasAttribute("hidden"),
+    ).toBe(true);
+    expect(element.shadowRoot?.querySelector('.sidebar [data-command="into"]')).not.toBeNull();
   });
 
   it("starts an algorithm lesson with its beginner problem introduction", async () => {
@@ -155,13 +176,28 @@ console.log(answer);`;
     const next = element.shadowRoot?.querySelector<HTMLButtonElement>(
       ".guided-next",
     );
+    const sidebarNext = element.shadowRoot?.querySelector<HTMLButtonElement>(
+      ".sidebar-guided-next",
+    );
+    const sidebarPrevious = element.shadowRoot?.querySelector<HTMLButtonElement>(
+      ".sidebar-guided-previous",
+    );
 
     expect(element.shadowRoot?.querySelector(".guided-overlay")?.hasAttribute("hidden")).toBe(
       false,
     );
     expect(element.guidedMode).toBe(true);
     expect(element.shadowRoot?.querySelector(".cm-guided-dim")).not.toBeNull();
+    expect(
+      element.shadowRoot?.querySelector(".runtime-sidebar-controls")?.hasAttribute("hidden"),
+    ).toBe(true);
+    expect(
+      element.shadowRoot?.querySelector(".guided-sidebar-controls")?.hasAttribute("hidden"),
+    ).toBe(false);
     expect(title?.textContent).toBe("Create the first value");
+    expect(element.shadowRoot?.querySelector(".teaching-title")?.textContent).toBe(
+      "Create the first value",
+    );
     expect(previous?.disabled).toBe(true);
     expect(element.shadowRoot?.querySelector(".guided-question")?.hasAttribute("hidden")).toBe(
       false,
@@ -169,11 +205,38 @@ console.log(answer);`;
     expect(
       element.shadowRoot?.querySelectorAll(".guided-question .choice-option"),
     ).toHaveLength(3);
+    const guidedQuestion = element.shadowRoot?.querySelector(".guided-question");
+    const guidedDocumentation = element.shadowRoot?.querySelector(
+      ".guided-documentation",
+    );
+    const questionBeforeDocumentation =
+      guidedQuestion && guidedDocumentation
+        ? guidedQuestion.compareDocumentPosition(guidedDocumentation)
+        : 0;
+    expect(
+      Boolean(questionBeforeDocumentation & Node.DOCUMENT_POSITION_FOLLOWING),
+    ).toBe(true);
+    expect(guidedDocumentation?.hasAttribute("hidden")).toBe(true);
+    element.shadowRoot
+      ?.querySelector<HTMLButtonElement>(".guided-question .choice-option")
+      ?.click();
+    element.shadowRoot
+      ?.querySelector<HTMLButtonElement>(".guided-solution-toggle")
+      ?.click();
+    expect(
+      element.shadowRoot?.querySelector(".guided-solution")?.hasAttribute("hidden"),
+    ).toBe(false);
+    expect(
+      element.shadowRoot?.querySelector(".teaching-solution")?.hasAttribute("hidden"),
+    ).toBe(false);
 
-    next?.click();
+    sidebarNext?.click();
     expect(title?.textContent).toBe("Derive the second value");
     expect(next?.textContent).toBe("Finish");
-    previous?.click();
+    expect(element.shadowRoot?.querySelector(".teaching-title")?.textContent).toBe(
+      "Derive the second value",
+    );
+    sidebarPrevious?.click();
     expect(title?.textContent).toBe("Create the first value");
   });
 });
