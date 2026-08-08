@@ -1,5 +1,9 @@
 import { javascript } from "@codemirror/lang-javascript";
-import { bracketMatching, defaultHighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import {
+  bracketMatching,
+  HighlightStyle,
+  syntaxHighlighting,
+} from "@codemirror/language";
 import {
   EditorState,
   RangeSet,
@@ -20,6 +24,7 @@ import {
   rectangularSelection,
   type DecorationSet,
 } from "@codemirror/view";
+import { tags } from "@lezer/highlight";
 import type { ExecutionPoint } from "./core/types";
 
 interface BreakpointChange {
@@ -56,12 +61,50 @@ class BreakpointMarker extends GutterMarker {
 
   toDOM(): HTMLElement {
     const marker = document.createElement("span");
+    marker.className = "cm-breakpoint-chevron";
     marker.setAttribute("aria-hidden", "true");
     return marker;
   }
 }
 
 const breakpointMarker = new BreakpointMarker();
+
+const chromeDarkHighlightStyle = HighlightStyle.define([
+  {
+    tag: [tags.keyword, tags.modifier, tags.operatorKeyword],
+    color: "#c58af9",
+  },
+  {
+    tag: [tags.definition(tags.variableName), tags.function(tags.variableName)],
+    color: "#8ab4f8",
+  },
+  {
+    tag: [tags.typeName, tags.className, tags.namespace],
+    color: "#78d9ec",
+  },
+  {
+    tag: [tags.string, tags.special(tags.string), tags.regexp],
+    color: "#f28b82",
+  },
+  {
+    tag: [tags.number, tags.bool, tags.null, tags.atom],
+    color: "#f6aea9",
+  },
+  {
+    tag: [tags.propertyName, tags.attributeName],
+    color: "#bdc1c6",
+  },
+  {
+    tag: [tags.comment, tags.docComment],
+    color: "#9aa0a6",
+    fontStyle: "italic",
+  },
+  {
+    tag: [tags.operator, tags.punctuation, tags.bracket],
+    color: "#d7dae0",
+  },
+  { tag: tags.invalid, color: "#f28b82", textDecoration: "underline" },
+]);
 
 const breakpointState = StateField.define<RangeSet<GutterMarker>>({
   create: () => RangeSet.empty,
@@ -181,7 +224,7 @@ export function createEditor({
       rectangularSelection(),
       highlightActiveLine(),
       bracketMatching(),
-      syntaxHighlighting(defaultHighlightStyle),
+      syntaxHighlighting(chromeDarkHighlightStyle),
       javascript({ typescript: true }),
       EditorState.readOnly.of(readOnly),
       EditorView.lineWrapping,
@@ -194,7 +237,7 @@ export function createEditor({
         {
           "&": {
             height: "100%",
-            color: "#d7dae0",
+            color: "#e8eaed",
             backgroundColor: "#202124",
             fontSize: "13px",
           },
@@ -209,9 +252,9 @@ export function createEditor({
             overflow: "auto",
           },
           ".cm-gutters": {
-            backgroundColor: "#202124",
+            backgroundColor: "#1f2023",
             borderRight: "1px solid #303134",
-            color: "#74777d",
+            color: "#8b8e94",
           },
           ".cm-lineNumbers .cm-gutterElement": {
             minWidth: "38px",
@@ -222,27 +265,30 @@ export function createEditor({
             cursor: "pointer",
             display: "flex",
             justifyContent: "center",
-            width: "18px",
+            width: "17px",
           },
           ".cm-breakpoint-marker": {
-            background: "#e35b66",
-            border: "2px solid #202124",
-            borderRadius: "50%",
-            boxShadow: "0 0 0 1px #e35b66",
+            alignItems: "center",
+            display: "flex",
+            justifyContent: "center",
+          },
+          ".cm-breakpoint-chevron": {
+            backgroundColor: "#8ab4f8",
+            clipPath: "polygon(0 8%, 72% 8%, 100% 50%, 72% 92%, 0 92%)",
             display: "block",
-            height: "8px",
-            width: "8px",
+            height: "13px",
+            width: "13px",
           },
           ".cm-activeLine": {
             backgroundColor: "rgba(138, 180, 248, 0.045)",
           },
           ".cm-debug-line": {
-            backgroundColor: "rgba(250, 206, 90, 0.11)",
-            boxShadow: "inset 3px 0 0 #f9c74f",
+            backgroundColor: "rgba(138, 180, 248, 0.1)",
+            boxShadow: "inset 3px 0 0 #8ab4f8",
           },
           ".cm-debug-node": {
-            backgroundColor: "rgba(138, 180, 248, 0.2)",
-            borderBottom: "1px solid rgba(138, 180, 248, 0.65)",
+            backgroundColor: "rgba(138, 180, 248, 0.14)",
+            borderBottom: "1px solid rgba(138, 180, 248, 0.72)",
           },
           ".cm-selectionBackground, ::selection": {
             backgroundColor: "rgba(138, 180, 248, 0.27) !important",
