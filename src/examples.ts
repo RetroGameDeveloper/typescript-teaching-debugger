@@ -21,6 +21,82 @@ export interface AlgorithmExample {
   title: string;
 }
 
+interface BeginnerIntroduction {
+  analogy: string;
+  explanation: string;
+}
+
+const beginnerIntroductions: Record<string, BeginnerIntroduction> = {
+  "cfg-reverse-postorder": {
+    analogy: "Imagine rooms joined by one-way doors. We need a useful list of every room we can reach from the entrance, even when some doors lead back to rooms we already visited.",
+    explanation: "Walk through each reachable room without visiting one twice. Write a room down only after exploring all doors leaving it, then reverse that finished list. Compiler passes use the result so information usually reaches a room before that room is processed.",
+  },
+  "iterative-dominators": {
+    analogy: "Imagine asking which checkpoints you must pass on every possible route from a building entrance to each room. A checkpoint that appears on every route controls access to that room.",
+    explanation: "Start with generous guesses, then repeatedly compare all routes entering each block. Remove any block that is not shared by every incoming route. Stop when another pass changes nothing.",
+  },
+  "dominance-frontiers": {
+    analogy: "Imagine two paths splitting around a park and meeting again. A guide who controlled one path stops having complete control where the paths join.",
+    explanation: "Look at every control-flow join and walk backwards through its incoming paths. Record the join for each block whose dominance reaches that boundary. These boundaries tell SSA construction where different values may meet.",
+  },
+  "cytron-phi-placement": {
+    analogy: "Imagine two children write different answers for `x` on two paths, then meet in the same room. The room needs a small sign saying which `x` arrived.",
+    explanation: "For each variable, begin at blocks that define it. Follow their dominance frontiers to joins and place a phi function wherever definitions can meet. Treat each new phi as another definition until no more joins need one.",
+  },
+  "ssa-renaming": {
+    analogy: "Imagine every new version of a toy gets a numbered sticker: `x1`, `x2`, then `x3`. When someone asks for `x`, they receive the newest sticker visible on their path.",
+    explanation: "Walk down the dominator tree. Give every definition a fresh number, replace each use with the current numbered version, and restore the previous version when leaving a branch.",
+  },
+  "linear-search": {
+    analogy: "Imagine looking for a red toy in a row of boxes. Open the first box, then the next one, and keep going until the toy appears.",
+    explanation: "Check each array value from left to right. Return its position as soon as it equals the target. If every value is checked without a match, return `-1`.",
+  },
+  "binary-search": {
+    analogy: "Imagine finding a word in a dictionary. Open near the middle, decide whether the word comes before or after that page, and ignore the half that cannot contain it.",
+    explanation: "The values must already be sorted. Compare the middle value with the target, keep only the possible half, and repeat until the value is found or the search range is empty.",
+  },
+  "bubble-sort": {
+    analogy: "Imagine children in a line comparing heights with the child beside them. Whenever taller is on the left, the pair swaps places.",
+    explanation: "Compare neighbouring values repeatedly and swap pairs that are out of order. Each full pass moves the largest remaining value to the end, like a bubble rising to the surface.",
+  },
+  "insertion-sort": {
+    analogy: "Imagine sorting playing cards in your hand. Take one new card and slide it left until it sits between the correct cards.",
+    explanation: "Keep a sorted section at the start of the array. Take the next value, shift larger values one place right, and insert it into the gap that remains.",
+  },
+  "selection-sort": {
+    analogy: "Imagine repeatedly choosing the smallest toy from a messy pile and placing it into the next empty spot in a neat row.",
+    explanation: "Scan the unsorted part to find its smallest value, then swap that value into the next output position. Repeat until every position is sorted.",
+  },
+  "merge-sort": {
+    analogy: "Imagine splitting a messy pile of cards into tiny piles, sorting those tiny piles, then joining them by repeatedly taking the smaller card at the front.",
+    explanation: "Divide the array into halves until each piece has at most one value. Recursively sort the pieces, then merge each pair by choosing the smallest available front value.",
+  },
+  "quick-sort": {
+    analogy: "Imagine choosing one child as a height marker. Shorter children move to one side and taller children move to the other side.",
+    explanation: "Choose a pivot, partition the values around it, and leave the pivot in its final position. Recursively repeat the same process for the values on each side.",
+  },
+  "breadth-first-search": {
+    analogy: "Imagine news spreading through friends. First you tell your closest friends, then they tell their friends, so the news moves outward one group at a time.",
+    explanation: "Put the start vertex in a queue. Repeatedly remove the oldest vertex, visit its unseen neighbours, and add them to the back. This explores an unweighted graph by distance from the start.",
+  },
+  "depth-first-search": {
+    analogy: "Imagine exploring a maze by following one passage as far as possible. When it ends, walk back to the last choice and try another passage.",
+    explanation: "Visit a vertex, mark it seen, and recursively explore each unseen neighbour. Backtracking returns to earlier vertices when a branch has no unexplored neighbours.",
+  },
+  "dijkstra-shortest-path": {
+    analogy: "Imagine planning deliveries on roads with different travel times. Always finish the closest place you can currently reach before considering a more expensive journey.",
+    explanation: "Give the start vertex distance zero and every other vertex infinity. Repeatedly choose the unfinished vertex with the smallest distance and use its outgoing edges to improve neighbouring distances.",
+  },
+  "factorial-recursion": {
+    analogy: "Imagine arranging toys in a row. With five toys there are five choices for the first place, then four choices, then three, until only one choice remains.",
+    explanation: "Multiply the current number by the factorial of the number below it. The base case returns `1` for zero or one, allowing all waiting multiplications to finish.",
+  },
+  "fibonacci-dynamic-programming": {
+    analogy: "Imagine building a number path where every new stepping stone is made by adding the previous two stones together.",
+    explanation: "Start with `0` and `1`. Add the last two stored values to create the next value, append it to the table, and repeat until the requested sequence length is reached.",
+  },
+};
+
 const sourceAlgorithmExamples: AlgorithmExample[] = [
   {
     id: "cfg-reverse-postorder",
@@ -776,7 +852,12 @@ export const algorithmExamples: AlgorithmExample[] = sourceAlgorithmExamples.map
       reorderedNotes,
       questionLines,
     );
-    const prefix = `${problemComment(example.title, example.description)}\n\n`;
+    const introduction = beginnerIntroductions[example.id];
+    const prefix = `${problemComment(
+      example.title,
+      introduction?.analogy ?? example.description,
+      introduction?.explanation ?? example.description,
+    )}\n\n`;
     const prefixLines = prefix.split("\n").length - 1;
 
     return {
