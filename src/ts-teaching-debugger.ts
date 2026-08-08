@@ -89,8 +89,7 @@ const componentTemplate = `
       <button class="tool-button" data-command="restart" type="button" aria-label="Restart" title="Restart (Ctrl+Shift+F5)"></button>
       <span class="toolbar-separator" aria-hidden="true"></span>
       <button class="view-toggle" data-view="comments" type="button" aria-pressed="false">Comments</button>
-      <button class="view-toggle" data-view="questions" type="button" aria-pressed="true">Questions</button>
-      <button class="view-toggle" data-view="guided" type="button" aria-pressed="false">Guided</button>
+      <button class="view-toggle" data-view="guided" type="button" aria-pressed="true">Guided</button>
       <div class="pause-summary" data-status="ready">Ready to evaluate TypeScript</div>
     </div>
     <div class="workspace">
@@ -333,12 +332,11 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   private suppressEditorChange = false;
   private _teachingNotes: TeachingNotes = {};
   private commentsVisible = false;
-  private questionsVisible = true;
   private solutionVisible = false;
   private teachingLine?: number;
   private teachingSymbols: TeachingSymbol[] = [];
   private guidedComments: TeachingComment[] = [];
-  private guidedEnabled = false;
+  private guidedEnabled = true;
   private guidedIndex = 0;
   private guidedSolutionVisible = false;
   private _guidedSteps: number[] = [];
@@ -393,20 +391,6 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   set showComments(visible: boolean) {
     this.commentsVisible = Boolean(visible);
     this.applyCommentVisibility();
-    this.renderViewToggles();
-  }
-
-  get showQuestions(): boolean {
-    return this.questionsVisible;
-  }
-
-  set showQuestions(visible: boolean) {
-    this.questionsVisible = Boolean(visible);
-    this.solutionVisible = false;
-    if (this.shadowRoot) {
-      this.renderTeachingCard();
-      this.renderGuidedDialog();
-    }
     this.renderViewToggles();
   }
 
@@ -597,8 +581,6 @@ export class TsTeachingDebuggerElement extends HTMLElement {
         () => {
           if (button.dataset.view === "comments") {
             this.showComments = !this.showComments;
-          } else if (button.dataset.view === "questions") {
-            this.showQuestions = !this.showQuestions;
           } else if (button.dataset.view === "guided") {
             this.guidedMode = !this.guidedMode;
           }
@@ -791,7 +773,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
     );
 
     const question = this.requiredElement<HTMLElement>(".guided-question");
-    question.hidden = !this.questionsVisible || !comment.question;
+    question.hidden = !comment.question;
 
     if (!question.hidden && comment.question) {
       renderMarkdown(
@@ -899,7 +881,19 @@ export class TsTeachingDebuggerElement extends HTMLElement {
       documentationTitle.textContent = symbol.note.title;
       const documentationCopy = document.createElement("div");
       documentationCopy.className = "hover-doc-copy";
-      renderMarkdown(documentationCopy, symbol.note.explanation);
+      const argumentsMarkdown =
+        symbol.kind === "function" && symbol.note.arguments
+          ? [
+              "### Arguments",
+              ...Object.entries(symbol.note.arguments).map(
+                ([name, description]) => `* \`${name}\` - ${description}`,
+              ),
+            ].join("\n")
+          : "";
+      renderMarkdown(
+        documentationCopy,
+        [symbol.note.explanation, argumentsMarkdown].filter(Boolean).join("\n\n"),
+      );
       documentation.append(documentationTitle, documentationCopy);
       card.append(documentation);
     }
@@ -1002,10 +996,8 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   private renderViewToggles(): void {
     if (!this.shadowRoot) return;
     const comments = this.requiredElement<HTMLButtonElement>('[data-view="comments"]');
-    const questions = this.requiredElement<HTMLButtonElement>('[data-view="questions"]');
     const guided = this.requiredElement<HTMLButtonElement>('[data-view="guided"]');
     comments.setAttribute("aria-pressed", String(this.commentsVisible));
-    questions.setAttribute("aria-pressed", String(this.questionsVisible));
     guided.setAttribute("aria-pressed", String(this.guidedEnabled));
   }
 
@@ -1094,7 +1086,7 @@ export class TsTeachingDebuggerElement extends HTMLElement {
   private renderQuestion(note: TeachingNote | undefined, line: number): void {
     const container = this.requiredElement<HTMLElement>(".teaching-question");
 
-    if (!this.questionsVisible || !note?.question) {
+    if (!note?.question) {
       container.hidden = true;
       return;
     }
