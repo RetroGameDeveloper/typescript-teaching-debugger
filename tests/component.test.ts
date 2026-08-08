@@ -62,6 +62,11 @@ console.log(answer);`;
     const reveal = element.shadowRoot?.querySelector<HTMLButtonElement>(
       ".solution-toggle",
     );
+    expect(reveal?.disabled).toBe(true);
+    element.shadowRoot
+      ?.querySelector<HTMLButtonElement>(".teaching-question .choice-option")
+      ?.click();
+    expect(reveal?.disabled).toBe(false);
     reveal?.click();
     expect(element.shadowRoot?.querySelector(".teaching-solution")?.hasAttribute("hidden")).toBe(
       false,
@@ -69,11 +74,7 @@ console.log(answer);`;
 
     expect(element.shadowRoot?.querySelector('[data-view="questions"]')).toBeNull();
 
-    const comments = element.shadowRoot?.querySelector<HTMLButtonElement>(
-      '[data-view="comments"]',
-    );
-    comments?.click();
-    expect(element.showComments).toBe(true);
+    expect(element.shadowRoot?.querySelector('[data-view="comments"]')).toBeNull();
 
     const finished = await element.resume();
     expect(finished.status).toBe("complete");
@@ -159,11 +160,15 @@ console.log(answer);`;
       false,
     );
     expect(element.guidedMode).toBe(true);
+    expect(element.shadowRoot?.querySelector(".cm-guided-dim")).not.toBeNull();
     expect(title?.textContent).toBe("Create the first value");
     expect(previous?.disabled).toBe(true);
     expect(element.shadowRoot?.querySelector(".guided-question")?.hasAttribute("hidden")).toBe(
       false,
     );
+    expect(
+      element.shadowRoot?.querySelectorAll(".guided-question .choice-option"),
+    ).toHaveLength(3);
 
     next?.click();
     expect(title?.textContent).toBe("Derive the second value");
