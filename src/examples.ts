@@ -5,6 +5,7 @@ import { prepareTeachingNotes, type TeachingNotes } from "./teaching";
 export type AlgorithmCategory =
   | "Compilers"
   | "Dynamic programming"
+  | "Games"
   | "Graphs"
   | "Recursion"
   | "Searching"
@@ -97,6 +98,50 @@ const beginnerIntroductions: Record<string, BeginnerIntroduction> = {
   "fibonacci-dynamic-programming": {
     analogy: "Imagine building a number path where every new stepping stone is made by adding the previous two stones together.",
     explanation: "Start with `0` and `1`. Add the last two stored values to create the next value, append it to the table, and repeat until the requested sequence length is reached.",
+  },
+  "flood-fill": {
+    analogy: "Imagine pouring paint onto a tile floor. The colour spreads into every neighbouring tile of the same colour, stopping at tiles that already differ.",
+    explanation: "Read the starting cell's colour, then use a queue to visit orthogonal neighbours. Recolor each matching cell when it is first discovered so the fill cannot loop forever. This is the same idea games use for paint buckets and connected regions.",
+  },
+  "bresenham-line": {
+    analogy: "Imagine walking from one street corner to another on a city grid. At each step you decide whether the next move should go more horizontally, more vertically, or both.",
+    explanation: "Track an error term that remembers how far discrete steps have drifted from the ideal line. Whenever the error grows large enough on an axis, advance on that axis and reduce the error again. The result is every grid cell the line crosses.",
+  },
+  "aabb-collision": {
+    analogy: "Imagine two picture frames on a wall. They overlap unless one frame is completely to the left, right, above, or below the other.",
+    explanation: "Two axis-aligned boxes collide when they overlap on both the x-axis and the y-axis. Testing the four separation cases and inverting the result is a common, cheap broad-phase collision check.",
+  },
+  "binary-heap": {
+    analogy: "Imagine a family tree where every parent is smaller than its children. The smallest value always sits at the root, ready to be taken next.",
+    explanation: "Store the heap in an array. Insertions append a value and sift it upward; removals replace the root with the last value and sift downward until heap order is restored. Games use this structure for priority queues.",
+  },
+  "a-star-pathfinding": {
+    analogy: "Imagine exploring a city while always expanding the route that currently looks cheapest after adding an optimistic estimate of the remaining walk to your destination.",
+    explanation: "Keep a best-known cost `g` from the start and an estimate `f = g + h` using Manhattan distance. Repeatedly expand the lowest-`f` open cell and relax its walkable neighbours until the goal is selected.",
+  },
+  "minimax": {
+    analogy: "Imagine two players taking turns. One always picks the highest available score, and the other always picks the lowest, each assuming the opponent plays perfectly.",
+    explanation: "At a leaf, return the stored score. At a maximizing node take the largest child result; at a minimizing node take the smallest child result. The root score is the best achievable outcome against perfect replies.",
+  },
+  "npc-finite-state-machine": {
+    analogy: "Imagine a guard who patrols quietly, then chases when they spot you, then fights when close enough, and returns to patrol if you disappear.",
+    explanation: "Represent each behaviour as a state. On every update, inspect a few conditions and return the next state. Recording the sequence of states makes enemy AI easy to teach and debug.",
+  },
+  "fisher-yates-shuffle": {
+    analogy: "Imagine cards in a row. Starting from the last card, swap it with a random card at that position or earlier, then move one step left and repeat.",
+    explanation: "Walk backward through the array. At each index, choose a random earlier-or-equal index and swap. A seeded generator keeps the lesson deterministic while still showing a fair shuffle.",
+  },
+  "weighted-random-pick": {
+    analogy: "Imagine spinning a wheel divided into slices of different sizes. Larger slices are more likely, but every slice can still win.",
+    explanation: "Sum the weights, roll a number in that range, then walk the list subtracting each weight until the roll lands inside one item's slice. This is the core of loot and spawn tables.",
+  },
+  "cellular-automata-caves": {
+    analogy: "Imagine each tile looking at its eight neighbours and deciding to become rock or open space based on how crowded those neighbours are.",
+    explanation: "For every cell, count neighbouring walls and treat out-of-bounds cells as walls. If the count is high enough, the cell becomes a wall in the next generation; otherwise it becomes open space.",
+  },
+  "topological-sort": {
+    analogy: "Imagine lining up chores so that each chore only starts after the chores it depends on are finished.",
+    explanation: "Count incoming edges for every node, queue the nodes with indegree zero, then repeatedly emit a queued node and reduce the indegrees of its neighbours. The emitted order respects every dependency.",
   },
 };
 
@@ -829,6 +874,694 @@ console.log("5! =", result);`,
 
 const result = fibonacci(10);
 console.log("Sequence:", result);`,
+  },
+  {
+    id: "flood-fill",
+    title: "Flood fill",
+    category: "Games",
+    description: "Recolor every connected grid cell that matches a starting value.",
+    timeComplexity: "O(R * C)",
+    spaceComplexity: "O(R * C)",
+    breakpoints: [8, 32],
+    code: `type Grid = number[][];
+
+function floodFill(
+  grid: Grid,
+  startRow: number,
+  startColumn: number,
+  replacement: number,
+): void {
+  const target = grid[startRow][startColumn];
+
+  if (target === replacement) {
+    return;
+  }
+
+  const queue = [[startRow, startColumn]];
+  grid[startRow][startColumn] = replacement;
+
+  while (queue.length > 0) {
+    const cell = queue.shift();
+
+    if (cell === undefined) {
+      break;
+    }
+
+    const row = cell[0];
+    const column = cell[1];
+    const neighbors = [
+      [row - 1, column],
+      [row + 1, column],
+      [row, column - 1],
+      [row, column + 1],
+    ];
+
+    for (const neighbor of neighbors) {
+      const nextRow = neighbor[0];
+      const nextColumn = neighbor[1];
+
+      if (
+        nextRow >= 0 &&
+        nextRow < grid.length &&
+        nextColumn >= 0 &&
+        nextColumn < grid[0].length &&
+        grid[nextRow][nextColumn] === target
+      ) {
+        grid[nextRow][nextColumn] = replacement;
+        queue.push([nextRow, nextColumn]);
+      }
+    }
+  }
+}
+
+const grid: Grid = [
+  [1, 1, 0],
+  [1, 0, 0],
+  [1, 1, 1],
+];
+floodFill(grid, 0, 0, 2);
+console.log("Filled grid:", grid);`,
+  },
+  {
+    id: "bresenham-line",
+    title: "Bresenham line",
+    category: "Games",
+    description: "Trace every grid cell crossed by a straight line.",
+    timeComplexity: "O(max(Δx, Δy))",
+    spaceComplexity: "O(max(Δx, Δy))",
+    breakpoints: [14, 20],
+    code: `function bresenhamLine(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+): number[][] {
+  const points: number[][] = [];
+  let x = x0;
+  let y = y0;
+  const deltaX = Math.abs(x1 - x0);
+  const deltaY = Math.abs(y1 - y0);
+  const stepX = x0 < x1 ? 1 : -1;
+  const stepY = y0 < y1 ? 1 : -1;
+  let error = deltaX - deltaY;
+
+  while (true) {
+    points.push([x, y]);
+
+    if (x === x1 && y === y1) {
+      break;
+    }
+
+    const error2 = error * 2;
+
+    if (error2 > -deltaY) {
+      error -= deltaY;
+      x += stepX;
+    }
+
+    if (error2 < deltaX) {
+      error += deltaX;
+      y += stepY;
+    }
+  }
+
+  return points;
+}
+
+const line = bresenhamLine(0, 0, 4, 2);
+console.log("Line cells:", line);`,
+  },
+  {
+    id: "aabb-collision",
+    title: "AABB collision",
+    category: "Games",
+    description: "Test whether two axis-aligned rectangles overlap.",
+    timeComplexity: "O(1)",
+    spaceComplexity: "O(1)",
+    breakpoints: [9, 15],
+    code: `function aabbOverlap(
+  ax: number,
+  ay: number,
+  aw: number,
+  ah: number,
+  bx: number,
+  by: number,
+  bw: number,
+  bh: number,
+): boolean {
+  const separate =
+    ax + aw <= bx ||
+    bx + bw <= ax ||
+    ay + ah <= by ||
+    by + bh <= ay;
+
+  return !separate;
+}
+
+const hits = aabbOverlap(0, 0, 2, 2, 1, 1, 2, 2);
+const misses = aabbOverlap(0, 0, 2, 2, 3, 0, 2, 2);
+console.log("Overlap:", hits);
+console.log("Separate:", misses);`,
+  },
+  {
+    id: "binary-heap",
+    title: "Binary heap",
+    category: "Games",
+    description: "Insert values and repeatedly extract the smallest one.",
+    timeComplexity: "O(log n) per operation",
+    spaceComplexity: "O(n)",
+    breakpoints: [18, 55],
+    code: `function heapParent(index: number): number {
+  return Math.floor((index - 1) / 2);
+}
+
+function heapLeft(index: number): number {
+  return index * 2 + 1;
+}
+
+function heapRight(index: number): number {
+  return index * 2 + 2;
+}
+
+function siftUp(heap: number[], index: number): void {
+  while (index > 0) {
+    const parent = heapParent(index);
+
+    if (heap[index] >= heap[parent]) {
+      break;
+    }
+
+    const temporary = heap[index];
+    heap[index] = heap[parent];
+    heap[parent] = temporary;
+    index = parent;
+  }
+}
+
+function siftDown(heap: number[], index: number): void {
+  while (true) {
+    const left = heapLeft(index);
+    const right = heapRight(index);
+    let smallest = index;
+
+    if (left < heap.length && heap[left] < heap[smallest]) {
+      smallest = left;
+    }
+
+    if (right < heap.length && heap[right] < heap[smallest]) {
+      smallest = right;
+    }
+
+    if (smallest === index) {
+      break;
+    }
+
+    const temporary = heap[index];
+    heap[index] = heap[smallest];
+    heap[smallest] = temporary;
+    index = smallest;
+  }
+}
+
+function heapPush(heap: number[], value: number): void {
+  heap.push(value);
+  siftUp(heap, heap.length - 1);
+}
+
+function heapPop(heap: number[]): number | undefined {
+  if (heap.length === 0) {
+    return undefined;
+  }
+
+  const minimum = heap[0];
+  const last = heap.pop();
+
+  if (heap.length > 0 && last !== undefined) {
+    heap[0] = last;
+    siftDown(heap, 0);
+  }
+
+  return minimum;
+}
+
+const heap: number[] = [];
+heapPush(heap, 5);
+heapPush(heap, 1);
+heapPush(heap, 3);
+const first = heapPop(heap);
+const second = heapPop(heap);
+console.log("Pop order:", [first, second]);`,
+  },
+  {
+    id: "a-star-pathfinding",
+    title: "A* pathfinding",
+    category: "Games",
+    description: "Search a short walkable path with a goal heuristic.",
+    timeComplexity: "O(R * C * log(R * C))",
+    spaceComplexity: "O(R * C)",
+    breakpoints: [28, 48],
+    code: `type Point = { row: number; column: number };
+
+function keyOf(point: Point): string {
+  return point.row + "," + point.column;
+}
+
+function heuristic(a: Point, b: Point): number {
+  return Math.abs(a.row - b.row) + Math.abs(a.column - b.column);
+}
+
+function aStar(walkable: boolean[][], start: Point, goal: Point): Point[] {
+  const open: Point[] = [start];
+  const cameFrom: Record<string, string> = {};
+  const gScore: Record<string, number> = {};
+  const fScore: Record<string, number> = {};
+  const startKey = keyOf(start);
+  gScore[startKey] = 0;
+  fScore[startKey] = heuristic(start, goal);
+
+  while (open.length > 0) {
+    let bestIndex = 0;
+
+    for (let index = 1; index < open.length; index += 1) {
+      if (fScore[keyOf(open[index])] < fScore[keyOf(open[bestIndex])]) {
+        bestIndex = index;
+      }
+    }
+
+    const current = open[bestIndex];
+    open.splice(bestIndex, 1);
+
+    if (current.row === goal.row && current.column === goal.column) {
+      const path = [current];
+      let cursor = keyOf(current);
+
+      while (cameFrom[cursor] !== undefined) {
+        const parts = cameFrom[cursor].split(",");
+        const previous = {
+          row: Number(parts[0]),
+          column: Number(parts[1]),
+        };
+        path.unshift(previous);
+        cursor = cameFrom[cursor];
+      }
+
+      return path;
+    }
+
+    const neighbors = [
+      { row: current.row - 1, column: current.column },
+      { row: current.row + 1, column: current.column },
+      { row: current.row, column: current.column - 1 },
+      { row: current.row, column: current.column + 1 },
+    ];
+
+    for (const neighbor of neighbors) {
+      if (
+        neighbor.row < 0 ||
+        neighbor.row >= walkable.length ||
+        neighbor.column < 0 ||
+        neighbor.column >= walkable[0].length ||
+        !walkable[neighbor.row][neighbor.column]
+      ) {
+        continue;
+      }
+
+      const tentative = gScore[keyOf(current)] + 1;
+      const neighborKey = keyOf(neighbor);
+
+      if (
+        gScore[neighborKey] === undefined ||
+        tentative < gScore[neighborKey]
+      ) {
+        cameFrom[neighborKey] = keyOf(current);
+        gScore[neighborKey] = tentative;
+        fScore[neighborKey] = tentative + heuristic(neighbor, goal);
+        let queued = false;
+
+        for (const candidate of open) {
+          if (
+            candidate.row === neighbor.row &&
+            candidate.column === neighbor.column
+          ) {
+            queued = true;
+          }
+        }
+
+        if (!queued) {
+          open.push(neighbor);
+        }
+      }
+    }
+  }
+
+  return [];
+}
+
+const walkable = [
+  [true, true, false, true],
+  [true, false, false, true],
+  [true, true, true, true],
+];
+const path = aStar(
+  walkable,
+  { row: 0, column: 0 },
+  { row: 0, column: 3 },
+);
+console.log("Path:", path);`,
+  },
+  {
+    id: "minimax",
+    title: "Minimax",
+    category: "Games",
+    description: "Evaluate a game tree against a perfect opposing player.",
+    timeComplexity: "O(b^d)",
+    spaceComplexity: "O(d)",
+    breakpoints: [4, 12],
+    code: `type GameNode = {
+  value: number | null;
+  children: GameNode[];
+};
+
+function minimax(node: GameNode, maximizing: boolean): number {
+  if (node.value !== null) {
+    return node.value;
+  }
+
+  if (maximizing) {
+    let best = -Infinity;
+
+    for (const child of node.children) {
+      const score = minimax(child, false);
+
+      if (score > best) {
+        best = score;
+      }
+    }
+
+    return best;
+  }
+
+  let best = Infinity;
+
+  for (const child of node.children) {
+    const score = minimax(child, true);
+
+    if (score < best) {
+      best = score;
+    }
+  }
+
+  return best;
+}
+
+const tree: GameNode = {
+  value: null,
+  children: [
+    {
+      value: null,
+      children: [
+        { value: 3, children: [] },
+        { value: 5, children: [] },
+      ],
+    },
+    {
+      value: null,
+      children: [
+        { value: 2, children: [] },
+        { value: 9, children: [] },
+      ],
+    },
+  ],
+};
+const score = minimax(tree, true);
+console.log("Best score:", score);`,
+  },
+  {
+    id: "npc-finite-state-machine",
+    title: "NPC state machine",
+    category: "Games",
+    description: "Transition an enemy between patrol, chase, and attack.",
+    timeComplexity: "O(1) per update",
+    spaceComplexity: "O(1)",
+    breakpoints: [5, 18],
+    code: `type NpcState = "patrol" | "chase" | "attack";
+
+function transition(
+  state: NpcState,
+  playerVisible: boolean,
+  inAttackRange: boolean,
+): NpcState {
+  if (state === "patrol") {
+    if (playerVisible) {
+      return "chase";
+    }
+
+    return "patrol";
+  }
+
+  if (state === "chase") {
+    if (!playerVisible) {
+      return "patrol";
+    }
+
+    if (inAttackRange) {
+      return "attack";
+    }
+
+    return "chase";
+  }
+
+  if (!playerVisible) {
+    return "patrol";
+  }
+
+  if (!inAttackRange) {
+    return "chase";
+  }
+
+  return "attack";
+}
+
+const steps = [
+  { visible: false, range: false },
+  { visible: true, range: false },
+  { visible: true, range: true },
+  { visible: true, range: false },
+  { visible: false, range: false },
+];
+let state: NpcState = "patrol";
+const history: NpcState[] = [state];
+
+for (const step of steps) {
+  state = transition(state, step.visible, step.range);
+  history.push(state);
+}
+
+console.log("State history:", history);`,
+  },
+  {
+    id: "fisher-yates-shuffle",
+    title: "Fisher-Yates shuffle",
+    category: "Games",
+    description: "Produce a fair permutation with a seeded generator.",
+    timeComplexity: "O(n)",
+    spaceComplexity: "O(n)",
+    breakpoints: [2, 10],
+    code: `function nextSeed(seed: number): number {
+  return (seed * 1103515245 + 12345) % 2147483648;
+}
+
+function fisherYates(values: number[], seed: number): number[] {
+  const shuffled = values.slice();
+  let state = seed;
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    state = nextSeed(state);
+    const swapIndex = state % (index + 1);
+    const temporary = shuffled[index];
+    shuffled[index] = shuffled[swapIndex];
+    shuffled[swapIndex] = temporary;
+  }
+
+  return shuffled;
+}
+
+const deck = [1, 2, 3, 4, 5];
+const shuffled = fisherYates(deck, 1);
+console.log("Shuffled deck:", shuffled);`,
+  },
+  {
+    id: "weighted-random-pick",
+    title: "Weighted random pick",
+    category: "Games",
+    description: "Choose an item according to designer-authored weights.",
+    timeComplexity: "O(n)",
+    spaceComplexity: "O(1)",
+    breakpoints: [8, 14],
+    code: `function nextSeed(seed: number): number {
+  return (seed * 1103515245 + 12345) % 2147483648;
+}
+
+function weightedPick(
+  items: string[],
+  weights: number[],
+  seed: number,
+): string {
+  let total = 0;
+
+  for (const weight of weights) {
+    total += weight;
+  }
+
+  const state = nextSeed(seed);
+  let cursor = state % total;
+
+  for (let index = 0; index < items.length; index += 1) {
+    if (cursor < weights[index]) {
+      return items[index];
+    }
+
+    cursor -= weights[index];
+  }
+
+  return items[items.length - 1];
+}
+
+const loot = ["common", "rare", "epic"];
+const weights = [70, 25, 5];
+const drop = weightedPick(loot, weights, 42);
+console.log("Loot drop:", drop);`,
+  },
+  {
+    id: "cellular-automata-caves",
+    title: "Cellular automata caves",
+    category: "Games",
+    description: "Smooth a noisy grid into cave-like rooms.",
+    timeComplexity: "O(R * C)",
+    spaceComplexity: "O(R * C)",
+    breakpoints: [18, 36],
+    code: `function countWalls(grid: number[][], row: number, column: number): number {
+  let walls = 0;
+
+  for (let offsetRow = -1; offsetRow <= 1; offsetRow += 1) {
+    for (let offsetColumn = -1; offsetColumn <= 1; offsetColumn += 1) {
+      if (offsetRow === 0 && offsetColumn === 0) {
+        continue;
+      }
+
+      const nextRow = row + offsetRow;
+      const nextColumn = column + offsetColumn;
+
+      if (
+        nextRow < 0 ||
+        nextRow >= grid.length ||
+        nextColumn < 0 ||
+        nextColumn >= grid[0].length ||
+        grid[nextRow][nextColumn] === 1
+      ) {
+        walls += 1;
+      }
+    }
+  }
+
+  return walls;
+}
+
+function smoothCaves(grid: number[][]): number[][] {
+  const next: number[][] = [];
+
+  for (let row = 0; row < grid.length; row += 1) {
+    const line: number[] = [];
+
+    for (let column = 0; column < grid[row].length; column += 1) {
+      const walls = countWalls(grid, row, column);
+
+      if (walls >= 5) {
+        line.push(1);
+      } else {
+        line.push(0);
+      }
+    }
+
+    next.push(line);
+  }
+
+  return next;
+}
+
+let caves = [
+  [1, 1, 1, 0, 0],
+  [1, 0, 1, 0, 1],
+  [1, 0, 0, 0, 1],
+  [1, 1, 0, 1, 1],
+  [1, 1, 1, 1, 1],
+];
+caves = smoothCaves(caves);
+caves = smoothCaves(caves);
+console.log("Cave map:", caves);`,
+  },
+  {
+    id: "topological-sort",
+    title: "Topological sort",
+    category: "Games",
+    description: "Order quests so every dependency comes first.",
+    timeComplexity: "O(V + E)",
+    spaceComplexity: "O(V)",
+    breakpoints: [16, 30],
+    code: `type Graph = Record<string, string[]>;
+
+function topologicalSort(graph: Graph): string[] {
+  const indegree: Record<string, number> = {};
+
+  for (const node of Object.keys(graph)) {
+    indegree[node] = 0;
+  }
+
+  for (const node of Object.keys(graph)) {
+    for (const neighbor of graph[node]) {
+      indegree[neighbor] += 1;
+    }
+  }
+
+  const queue: string[] = [];
+
+  for (const node of Object.keys(indegree)) {
+    if (indegree[node] === 0) {
+      queue.push(node);
+    }
+  }
+
+  const order: string[] = [];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+
+    if (current === undefined) {
+      break;
+    }
+
+    order.push(current);
+
+    for (const neighbor of graph[current]) {
+      indegree[neighbor] -= 1;
+
+      if (indegree[neighbor] === 0) {
+        queue.push(neighbor);
+      }
+    }
+  }
+
+  return order;
+}
+
+const quests: Graph = {
+  intro: ["forest", "town"],
+  forest: ["boss"],
+  town: ["boss"],
+  boss: [],
+};
+const order = topologicalSort(quests);
+console.log("Quest order:", order);`,
   },
 ];
 

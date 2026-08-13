@@ -25,6 +25,22 @@ export const curriculumGroups: CurriculumGroup[] = [
     ids: ["fibonacci-dynamic-programming"],
   },
   {
+    title: "Game algorithms",
+    ids: [
+      "flood-fill",
+      "bresenham-line",
+      "aabb-collision",
+      "binary-heap",
+      "a-star-pathfinding",
+      "minimax",
+      "npc-finite-state-machine",
+      "fisher-yates-shuffle",
+      "weighted-random-pick",
+      "cellular-automata-caves",
+      "topological-sort",
+    ],
+  },
+  {
     title: "Control flow and SSA",
     ids: [
       "cfg-reverse-postorder",

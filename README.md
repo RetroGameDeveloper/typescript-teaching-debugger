@@ -14,8 +14,8 @@ An embeddable custom element that teaches synchronous TypeScript execution using
 * Responsive Chrome DevTools-inspired interface
 * Shadow DOM style isolation
 * Keyboard controls matching common browser debuggers
-* Searchable teaching library with 17 classic algorithms
-* Curriculum groups ordered from fundamentals through compiler algorithms
+* Searchable teaching library with 28 classic algorithms
+* Curriculum groups ordered from fundamentals through game and compiler algorithms
 * Live variable-value and Markdown documentation hovers
 * Automatic restart after a completed run
 * Subtle question checks in the right sidebar, or an optional bottom panel
@@ -26,7 +26,10 @@ An embeddable custom element that teaches synchronous TypeScript execution using
 
 The demo includes linear and binary search; bubble, insertion, selection, merge,
 and quick sort; breadth-first and depth-first graph traversal; Dijkstra shortest
-paths; recursive factorial; and Fibonacci tabulation. Every lesson includes
+paths; recursive factorial; and Fibonacci tabulation. Game lessons cover flood
+fill, Bresenham line tracing, AABB collision, binary heaps, A* pathfinding,
+minimax, NPC state machines, Fisher-Yates shuffle, weighted loot tables,
+cellular-automata caves, and topological quest ordering. Every lesson includes
 time and space complexity, suggested breakpoints, and code that can be stepped
 through inside the teaching runtime.
 
